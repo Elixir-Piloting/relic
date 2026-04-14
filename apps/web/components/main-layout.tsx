@@ -143,7 +143,6 @@ function MainLayoutContent({ children }: MainLayoutProps) {
               <Button
                 variant="outline"
                 className="w-full justify-between h-8 px-3 text-sm border-0 shadow-none focus:ring-0"
-                disabled={connectionsLoading}
               >
                 {currentConnection ? (
                   <div className="flex items-center gap-2 min-w-0">
