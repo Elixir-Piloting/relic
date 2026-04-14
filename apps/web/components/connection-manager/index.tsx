@@ -6,10 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Persistence } from "@/lib/persistence";
 import type { ConnectionConfig } from "@/lib/db/types";
 import { DatabaseProvider } from "@/lib/db/providers";
-import { loadConnections, saveConnection, deleteConnection } from "@/lib/connections/store";
+import { getAllConnections, deleteConnection as dbDeleteConnection } from "@/lib/db/indexeddb";
 import { ConnectionList } from "./ConnectionList";
 import { ConnectionForm } from "./ConnectionForm";
 import { ConfirmationDialog } from "@/components/confirmation-dialog";
+import { useConnections, useDeleteConnection } from "@/lib/query/hooks/use-connections";
 
 interface ConnectionManagerProps {
   onConnectionSelect: (config: ConnectionConfig) => void;
@@ -45,46 +46,27 @@ export function ConnectionManager({
   externalEditingConnection,
   onEditConnection,
 }: ConnectionManagerProps) {
-  const [connections, setConnections] = useState<ConnectionConfig[]>([]);
   const [internalDialogOpen, setInternalDialogOpen] = useState(defaultOpen);
   const [internalEditingConnection, setInternalEditingConnection] = useState<ConnectionConfig | null>(null);
-  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [editingConnection, setEditingConnection] = useState<ConnectionConfig | null>(null);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [connectionToDelete, setConnectionToDelete] = useState<string | null>(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
-  const isDialogOpen = dialogOpen !== undefined ? dialogOpen : internalDialogOpen;
-  const setIsDialogOpen = (open: boolean) => {
-    if (onDialogOpenChange) {
-      onDialogOpenChange(open);
-    } else {
-      setInternalDialogOpen(open);
-    }
-  };
-
-  const editingConnection = externalEditingConnection !== undefined ? externalEditingConnection : internalEditingConnection;
-  const setEditingConnection = (conn: ConnectionConfig | null) => {
-    if (onEditConnection) {
-      onEditConnection(conn);
-    } else {
-      setInternalEditingConnection(conn);
-    }
-  };
+  const { data: connections = [], isLoading } = useConnections();
+  const deleteConnectionMutation = useDeleteConnection();
 
   useEffect(() => {
-    if (defaultOpen !== internalDialogOpen) {
-      setInternalDialogOpen(defaultOpen);
+    if (dialogOpen !== undefined) {
+      setIsDialogOpen(dialogOpen);
     }
-  }, [defaultOpen]);
+  }, [dialogOpen]);
 
   useEffect(() => {
     if (externalEditingConnection !== undefined) {
       setInternalEditingConnection(externalEditingConnection);
     }
   }, [externalEditingConnection]);
-
-  useEffect(() => {
-    const conns = loadConnections();
-    setConnections(conns);
-  }, []);
 
   const handleEdit = (conn: ConnectionConfig) => {
     setEditingConnection(conn);
@@ -97,21 +79,15 @@ export function ConnectionManager({
     setDeleteConfirmOpen(true);
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (connectionToDelete) {
       const activeConnectionId = Persistence.getActiveConnectionId();
       if (activeConnectionId === connectionToDelete) {
         Persistence.setActiveConnectionId(null);
       }
 
-      deleteConnection(connectionToDelete);
-      const updatedConnections = loadConnections();
-      setConnections(updatedConnections);
+      await deleteConnectionMutation.mutateAsync({ id: connectionToDelete });
       setConnectionToDelete(null);
-
-      if (updatedConnections.length === 0) {
-        Persistence.setActiveConnectionId(null);
-      }
 
       if (onDialogChange) {
         onDialogChange(false);
@@ -120,7 +96,6 @@ export function ConnectionManager({
   };
 
   const handleConnectionCreated = (config: ConnectionConfig) => {
-    setConnections(loadConnections());
     setEditingConnection(null);
   };
 
@@ -160,7 +135,7 @@ export function ConnectionManager({
         </Button>
       )}
 
-      {!compact && (
+      {!compact && !isLoading && (
         <ConnectionList
           connections={connections}
           currentConnectionId={currentConnectionId}
@@ -180,10 +155,7 @@ export function ConnectionManager({
             setEditingConnection(null);
           }
         }}
-        onConnectionSelect={(config) => {
-          setConnections(loadConnections());
-          onConnectionSelect(config);
-        }}
+        onConnectionCreated={handleConnectionCreated}
       />
 
       <ConfirmationDialog
@@ -199,6 +171,3 @@ export function ConnectionManager({
     </div>
   );
 }
-
-export { ConnectionList } from "./ConnectionList";
-export { ConnectionForm } from "./ConnectionForm";

@@ -1,11 +1,10 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { Loader2, Plus, RefreshCw, Table as TableIcon } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -17,11 +16,13 @@ import { getConnection } from "@/lib/connections/store";
 import { DatabaseProvider } from "@/lib/db/providers";
 import { schemaChangeStager, type SchemaChange } from "@/lib/query/schema-change-stager";
 import { toast } from "sonner";
+import { useSchemas } from "@/lib/query/hooks/use-schemas";
+import { useTables } from "@/lib/query/hooks/use-tables";
+import { useExecuteQuery } from "@/lib/query/hooks/use-query";
 
 import type { Schema, Table } from "./types";
 import { SchemaSelector } from "./SchemaSelector";
 import { TableSearch } from "./TableSearch";
-import { useSchemaRefresh } from "@/components/schema-refresh-context";
 
 interface SchemaExplorerProps {
   connectionId?: string;
@@ -55,10 +56,6 @@ export function SchemaExplorer({
   onTableCreated,
   onOpenNewTableTab,
 }: SchemaExplorerProps) {
-  const { refreshKey } = useSchemaRefresh();
-  const [schemas, setSchemas] = useState<Schema[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [isMongoDB, setIsMongoDB] = useState(false);
   const [tableSearchTerm, setTableSearchTerm] = useState("");
   const [selectedSchema, setSelectedSchema] = useState<string | null>(null);
   const [schemaSearchTerm, setSchemaSearchTerm] = useState("");
@@ -70,195 +67,39 @@ export function SchemaExplorer({
   const [pendingSchemaChanges, setPendingSchemaChanges] = useState<SchemaChange[]>([]);
   const [deletingTable, setDeletingTable] = useState<{ schema: string; table: string } | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [isRefreshingTables, setIsRefreshingTables] = useState(false);
 
-  useEffect(() => {
-    if (!connectionId) {
-      setSchemas([]);
-      setLoading(false);
-      setSelectedSchema(null);
-      setIsMongoDB(false);
-      return;
-    }
+  const isMongoDB = connectionId ? getConnection(connectionId)?.provider === DatabaseProvider.MONGODB : false;
 
-    const conn = getConnection(connectionId);
-    setIsMongoDB(conn?.provider === DatabaseProvider.MONGODB);
+  const { data: schemaList = [], isLoading: schemasLoading, refetch: refetchSchemas } = useSchemas(connectionId || undefined);
+  
+  const schemas: Schema[] = useMemo(() => {
+    return schemaList.map((name: string) => ({
+      name,
+      tables: undefined,
+    }));
+  }, [schemaList]);
 
-    setLoading(true);
-    const timer = setTimeout(() => {
-      loadSchemas();
-    }, 300);
+  const { data: tables = [], isLoading: tablesLoading, refetch: refetchTables } = useTables(connectionId || undefined, selectedSchema || undefined);
 
-    return () => clearTimeout(timer);
-  }, [connectionId]);
+  const { mutateAsync: executeQuery, isPending: queryLoading } = useExecuteQuery(connectionId);
 
-  useEffect(() => {
+  const isRefreshingTables = tablesLoading;
+
+  useMemo(() => {
     if (schemas.length > 0 && !selectedSchema) {
-      const firstSchema = schemas[0].name;
-      setSelectedSchema(firstSchema);
-      const firstSchemaObj = schemas.find((s) => s.name === firstSchema);
-      if (firstSchemaObj && !firstSchemaObj.tables) {
-        loadTables(firstSchema).catch(console.error);
-      }
+      setSelectedSchema(schemas[0].name);
     }
   }, [schemas.length]);
 
-  useEffect(() => {
-    if (refreshKey > 0 && selectedSchema) {
-      loadTables(selectedSchema, true).catch(console.error);
-    }
-  }, [refreshKey, selectedSchema]);
-
-  const checkConnection = useCallback(async (): Promise<boolean> => {
-    try {
-      const response = await fetch("/api/db/status");
-      const data = await response.json();
-      return data.connected === true;
-    } catch {
-      return false;
-    }
-  }, []);
-
-  const loadSchemas = useCallback(async (retryCount = 0) => {
-    setLoading(true);
-    try {
-      if (retryCount === 0) {
-        const isConnected = await checkConnection();
-        if (!isConnected && connectionId) {
-          const conn = getConnection(connectionId);
-          if (conn) {
-            try {
-              await fetch("/api/db/connect", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(conn),
-              });
-              await new Promise((resolve) => setTimeout(resolve, 300));
-            } catch (reconnectError) {
-              console.error("Failed to reconnect:", reconnectError);
-            }
-          }
-
-          if (retryCount < 5) {
-            setTimeout(() => loadSchemas(retryCount + 1), 500);
-            return;
-          }
-        }
-      }
-
-      const response = await fetch("/api/db/schema");
-      const data = await response.json();
-
-      if (!response.ok) {
-        const errorMsg = data.error || "Failed to load schemas";
-        if (
-          errorMsg.includes("Not connected") ||
-          errorMsg.includes("No database connection") ||
-          errorMsg.includes("closed") ||
-          errorMsg.includes("not queryable")
-        ) {
-          if (retryCount < 5) {
-            setTimeout(() => loadSchemas(retryCount + 1), 500);
-            return;
-          }
-          setSchemas([]);
-          return;
-        }
-        throw new Error(errorMsg);
-      }
-
-      if (data.error) {
-        const errorMsg = data.error;
-        if (
-          retryCount < 5 &&
-          (errorMsg.includes("connection") ||
-            errorMsg.includes("closed") ||
-            errorMsg.includes("not queryable") ||
-            errorMsg.includes("Connection terminated") ||
-            errorMsg.includes("terminated"))
-        ) {
-          setTimeout(() => loadSchemas(retryCount + 1), 500);
-          return;
-        }
-        setSchemas([]);
-        return;
-      }
-
-      const schemasList = data.schemas || [];
-      if (schemasList.length === 0 && retryCount < 3) {
-        setTimeout(() => loadSchemas(retryCount + 1), 500);
-        return;
-      }
-
-      setSchemas((prevSchemas) => {
-        const existingTablesMap = new Map(prevSchemas.map((s) => [s.name, s.tables]));
-
-        const sortedSchemasList = [...schemasList].sort((a, b) => {
-          if (a === "public") return -1;
-          if (b === "public") return 1;
-          return a.localeCompare(b);
-        });
-
-        const newSchemas = sortedSchemasList.map((name: string) => ({
-          name,
-          tables: existingTablesMap.get(name),
-        }));
-
-        if (newSchemas.length > 0) {
-          const schemaToLoad = selectedSchema && sortedSchemasList.includes(selectedSchema)
-            ? selectedSchema
-            : newSchemas[0].name;
-
-          const targetSchema = newSchemas.find((s) => s.name === schemaToLoad);
-          if (targetSchema && !targetSchema.tables) {
-            setTimeout(() => loadTables(schemaToLoad), 0);
-          }
-        }
-
-        return newSchemas;
-      });
-    } catch (error) {
-      console.error("Failed to load schemas:", error);
-      if (retryCount < 3) {
-        setTimeout(() => loadSchemas(retryCount + 1), 500);
-        return;
-      }
-      setSchemas([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [connectionId, selectedSchema, checkConnection]);
-
   const handleSchemaSelect = useCallback(async (schemaName: string) => {
     setSelectedSchema(schemaName);
-    const schema = schemas.find((s) => s.name === schemaName);
-    if (schema && !schema.tables) {
-      await loadTables(schemaName);
-    }
-  }, [schemas]);
-
-  const loadTables = useCallback(async (schemaName: string, showLoading = false) => {
-    if (showLoading) setIsRefreshingTables(true);
-    try {
-      const response = await fetch(`/api/db/schema?schema=${encodeURIComponent(schemaName)}`);
-      const data = await response.json();
-
-      if (!response.ok) {
-        if (data.error?.includes("Not connected") || data.error?.includes("No database connection")) return;
-        throw new Error(data.error || "Failed to load tables");
-      }
-
-      if (data.error) return;
-
-      setSchemas((prev) =>
-        prev.map((s) => (s.name === schemaName ? { ...s, tables: data.tables || [] } : s))
-      );
-    } catch (error) {
-      console.error("Failed to load tables:", error);
-    } finally {
-      if (showLoading) setIsRefreshingTables(false);
-    }
   }, []);
+
+  const handleRefreshTables = useCallback(() => {
+    if (selectedSchema) {
+      refetchTables();
+    }
+  }, [selectedSchema, refetchTables]);
 
   const filteredSchemas = useMemo(() => {
     if (!tableSearchTerm.trim()) return schemas;
@@ -299,15 +140,15 @@ export function SchemaExplorer({
     );
   }
 
-  if (loading && schemas.length === 0) {
+  if (schemasLoading && schemas.length === 0) {
     return <SchemaExplorerLoadingState />;
   }
 
-  if (!loading && schemas.length === 0) {
+  if (!schemasLoading && schemas.length === 0) {
     return (
       <div className="p-4 space-y-2">
         <div className="text-sm text-muted-foreground">No schemas found</div>
-        <button onClick={() => loadSchemas()} className="text-xs text-primary hover:underline">
+        <button onClick={() => refetchSchemas()} className="text-xs text-primary hover:underline">
           Retry
         </button>
       </div>
@@ -318,54 +159,19 @@ export function SchemaExplorer({
     if (!newSchemaName.trim() || !connectionId) return;
 
     try {
-      const createResponse = await fetch("/api/db/query", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: `CREATE SCHEMA IF NOT EXISTS "${newSchemaName.trim()}"` }),
+      const result = await executeQuery({
+        query: `CREATE SCHEMA IF NOT EXISTS "${newSchemaName.trim()}"`,
       });
 
-      const createData = await createResponse.json();
-      if (!createResponse.ok || !createData.success) {
-        toast.error("Failed to create schema", { description: createData.error || "Unknown error" });
+      if (!result.success) {
+        toast.error("Failed to create schema", { description: result.error || "Unknown error" });
         return;
       }
 
       toast.success("Schema created successfully");
       setShowCreateSchemaDialog(false);
-      const createdSchemaName = newSchemaName.trim();
       setNewSchemaName("");
-
-      try {
-        const schemaResponse = await fetch("/api/db/schema");
-        const schemaData = await schemaResponse.json();
-
-        if (schemaData.schemas && Array.isArray(schemaData.schemas)) {
-          setSchemas((prevSchemas) => {
-            const existingTablesMap = new Map(prevSchemas.map((s) => [s.name, s.tables]));
-
-            const sortedSchemasList = [...schemaData.schemas].sort((a, b) => {
-              if (a === "public") return -1;
-              if (b === "public") return 1;
-              return a.localeCompare(b);
-            });
-
-            const newSchemas = sortedSchemasList.map((name: string) => ({
-              name,
-              tables: existingTablesMap.get(name),
-            }));
-
-            return newSchemas;
-          });
-
-          if (schemaData.schemas.includes(createdSchemaName)) {
-            setSelectedSchema(createdSchemaName);
-            setTimeout(() => loadTables(createdSchemaName).catch(console.error), 100);
-          }
-        }
-      } catch (error) {
-        console.error("Failed to reload schemas after creation:", error);
-        loadSchemas();
-      }
+      refetchSchemas();
     } catch (error) {
       toast.error("Failed to create schema", {
         description: error instanceof Error ? error.message : "Unknown error",
@@ -377,28 +183,39 @@ export function SchemaExplorer({
     if (!deletingTable) return;
 
     try {
-      const query = `DROP TABLE "${deletingTable.schema}"."${deletingTable.table}" CASCADE`;
-      const response = await fetch("/api/db/query", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query }),
+      const result = await executeQuery({
+        query: `DROP TABLE "${deletingTable.schema}"."${deletingTable.table}" CASCADE`,
       });
 
-      const data = await response.json();
-      if (!response.ok || !data.success) {
-        toast.error("Failed to delete table", { description: data.error || "Unknown error" });
+      if (!result.success) {
+        toast.error("Failed to delete table", { description: result.error || "Unknown error" });
         return;
       }
 
       toast.success("Table deleted successfully");
       setShowDeleteConfirm(false);
       setDeletingTable(null);
-      if (selectedSchema) loadTables(selectedSchema);
+      if (selectedSchema) refetchTables();
     } catch (error) {
       toast.error("Failed to delete table", {
         description: error instanceof Error ? error.message : "Unknown error",
       });
     }
+  };
+
+  const handleApplySchemaChanges = async () => {
+    for (const change of pendingSchemaChanges) {
+      for (const query of change.queries) {
+        const result = await executeQuery({ query });
+        if (!result.success) {
+          throw new Error(result.error || `Failed to apply change: ${change.description}`);
+        }
+      }
+    }
+    schemaChangeStager.clearChanges();
+    setPendingSchemaChanges([]);
+    if (selectedSchema) refetchTables();
+    toast.success("Schema changes applied successfully");
   };
 
   return (
@@ -431,7 +248,7 @@ export function SchemaExplorer({
                       size="icon"
                       className={cn("h-6 w-6 hover:text-foreground", isRefreshingTables && "text-muted-foreground opacity-50")}
                       disabled={isRefreshingTables}
-                      onClick={() => selectedSchema && loadTables(selectedSchema, true)}
+                      onClick={handleRefreshTables}
                     >
                       {isRefreshingTables ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
@@ -468,10 +285,7 @@ export function SchemaExplorer({
 
         {selectedSchema ? (
           (() => {
-            const currentSchema = filteredSchemas.find((s) => s.name === selectedSchema);
-            if (!currentSchema) return null;
-
-            const tablesToShow = currentSchema.tables || [];
+            const tablesToShow = tables;
             const filteredTables = tableSearchTerm.trim()
               ? tablesToShow.filter((table) =>
                   table.name.toLowerCase().includes(tableSearchTerm.toLowerCase())
@@ -558,7 +372,7 @@ export function SchemaExplorer({
               <Button variant="outline" onClick={() => setShowCreateSchemaDialog(false)}>
                 Cancel
               </Button>
-              <Button onClick={handleCreateSchema} disabled={!newSchemaName.trim()}>
+              <Button onClick={handleCreateSchema} disabled={!newSchemaName.trim() || queryLoading}>
                 Create
               </Button>
             </DialogFooter>
@@ -588,25 +402,7 @@ export function SchemaExplorer({
         open={showSchemaChangePreview}
         onOpenChange={setShowSchemaChangePreview}
         changes={pendingSchemaChanges}
-        onConfirm={async () => {
-          for (const change of pendingSchemaChanges) {
-            for (const query of change.queries) {
-              const response = await fetch("/api/db/query", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ query }),
-              });
-              const data = await response.json();
-              if (!response.ok || !data.success) {
-                throw new Error(data.error || `Failed to apply change: ${change.description}`);
-              }
-            }
-          }
-          schemaChangeStager.clearChanges();
-          setPendingSchemaChanges([]);
-          if (selectedSchema) loadTables(selectedSchema);
-          toast.success("Schema changes applied successfully");
-        }}
+        onConfirm={handleApplySchemaChanges}
         onCancel={() => {
           schemaChangeStager.clearChanges();
           setPendingSchemaChanges([]);

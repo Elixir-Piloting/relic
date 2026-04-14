@@ -14,15 +14,17 @@ import { parseConnectionURL } from "@/lib/connections/url-parser";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { DatabaseProviderSelector } from "@/components/database-provider-selector";
 import { LocalPostgresManager } from "@/components/local-postgres-manager";
-import { saveConnection, loadConnections } from "@/lib/connections/store";
+import { saveConnection as dbSaveConnection } from "@/lib/db/indexeddb";
 import { cn } from "@/lib/utils";
+import { useSaveConnection } from "@/lib/query/hooks/use-connections";
 
 interface ConnectionFormProps {
   isOpen: boolean;
   defaultOpen?: boolean;
   editingConnection?: ConnectionConfig | null;
   onDialogChange?: (open: boolean) => void;
-  onConnectionSelect: (config: ConnectionConfig) => void;
+  onConnectionSelect?: (config: ConnectionConfig) => void;
+  onConnectionCreated?: (config: ConnectionConfig) => void;
 }
 
 const DEFAULT_FORM_DATA: Partial<ConnectionConfig> = {
@@ -41,6 +43,7 @@ export function ConnectionForm({
   editingConnection,
   onDialogChange,
   onConnectionSelect,
+  onConnectionCreated,
 }: ConnectionFormProps) {
   const [formData, setFormData] = useState<Partial<ConnectionConfig>>(DEFAULT_FORM_DATA);
   const [connectionMode, setConnectionMode] = useState<"fields" | "url">("fields");
@@ -48,6 +51,8 @@ export function ConnectionForm({
   const [step, setStep] = useState<1 | 2>(1);
   const [urlDatabaseName, setUrlDatabaseName] = useState<string>("");
   const [urlPassword, setUrlPassword] = useState<string>("");
+
+  const saveConnectionMutation = useSaveConnection();
   const [showLocalPostgresManager, setShowLocalPostgresManager] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const [connectionString, setConnectionString] = useState("");
@@ -223,7 +228,7 @@ export function ConnectionForm({
     }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!formData.name || !formData.provider) {
       toast.error("Validation error", {
         description: "Please fill in all required fields",
@@ -283,9 +288,9 @@ export function ConnectionForm({
     }
 
     const config: ConnectionConfig = {
-      id: formData.id || `conn-${Date.now()}`,
-      name: formData.name,
-      provider: provider,
+      id: editingConnection?.id || `conn-${Date.now()}`,
+      name: formData.name || "",
+      provider: formData.provider || DatabaseProvider.POSTGRESQL,
       host: formData.host,
       port: formData.port || providerMeta.defaultPort,
       database: formData.database,
@@ -295,7 +300,7 @@ export function ConnectionForm({
       connectionString: formData.connectionString,
     };
 
-    saveConnection(config);
+    await saveConnectionMutation.mutateAsync({ connection: config });
     setIsDialogOpen(false);
     const wasEditing = !!editingConnection;
     if (wasEditing) {
@@ -306,7 +311,8 @@ export function ConnectionForm({
       toast.success("Connection saved", {
         description: `Saved connection "${config.name}"`,
       });
-      onConnectionSelect(config);
+      onConnectionSelect?.(config);
+      onConnectionCreated?.(config);
     }
     setFormData(DEFAULT_FORM_DATA);
     setStep(1);
@@ -352,16 +358,16 @@ export function ConnectionForm({
           showLocalPostgresManager && formData.provider === DatabaseProvider.POSTGRESQL ? (
             <div className="py-4 max-h-[70vh] overflow-y-auto">
               <LocalPostgresManager
-                onServerSelect={(config) => {
-                  saveConnection(config);
-                  onConnectionSelect(config);
+                onServerSelect={async (config) => {
+                  await saveConnectionMutation.mutateAsync({ connection: config });
+                  onConnectionSelect?.(config);
                   setIsDialogOpen(false);
                   onDialogChange?.(false);
                   toast.success("Connected to local PostgreSQL server");
                 }}
-                onCreateDatabase={(config) => {
-                  saveConnection(config);
-                  onConnectionSelect(config);
+                onCreateDatabase={async (config) => {
+                  await saveConnectionMutation.mutateAsync({ connection: config });
+                  onConnectionSelect?.(config);
                   setIsDialogOpen(false);
                   onDialogChange?.(false);
                 }}

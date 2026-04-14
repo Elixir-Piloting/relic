@@ -4,7 +4,7 @@ export interface LocalPostgresServer {
   host: string;
   port: number;
   version?: string;
-  accessible: boolean;
+  accessible?: boolean;
   databases?: string[];
   expanded?: boolean;
   loadingDatabases?: boolean;

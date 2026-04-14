@@ -14,19 +14,20 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import type { LocalPostgresServer, LocalPostgresManagerProps } from "./types";
 import { ServerList } from "./ServerList";
+import { useLocalPgServers, useLocalPgDatabases, useCreateDatabase } from "@/lib/query/hooks/use-local-pg-servers";
+import { useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/lib/query/keys";
 
 export function LocalPostgresManager({
   onServerSelect,
   onCreateDatabase,
 }: LocalPostgresManagerProps) {
-  const [servers, setServers] = useState<LocalPostgresServer[]>([]);
-  const [isDetecting, setIsDetecting] = useState(false);
+  const queryClient = useQueryClient();
   const [selectedServer, setSelectedServer] = useState<LocalPostgresServer | null>(null);
   const [showCreateDbDialog, setShowCreateDbDialog] = useState(false);
   const [newDbName, setNewDbName] = useState("");
   const [dbUser, setDbUser] = useState(process.env.USER || "postgres");
   const [dbPassword, setDbPassword] = useState("");
-  const [isCreating, setIsCreating] = useState(false);
   const [connectionName, setConnectionName] = useState("");
   const [showPasswordDialog, setShowPasswordDialog] = useState(false);
   const [passwordForServer, setPasswordForServer] = useState<LocalPostgresServer | null>(null);
@@ -43,82 +44,38 @@ export function LocalPostgresManager({
   } | null>(null);
   const [connectionNameToSave, setConnectionNameToSave] = useState("");
 
-  const detectServers = async () => {
-    setIsDetecting(true);
-    try {
-      const response = await fetch("/api/db/local-postgres/detect");
-      const data = await response.json();
-      setServers(data.servers || []);
-    } catch (error) {
-      console.error("Failed to detect servers:", error);
-      toast.error("Failed to detect local PostgreSQL servers");
-    } finally {
-      setIsDetecting(false);
-    }
-  };
-
-  useEffect(() => {
-    detectServers();
-  }, []);
+  const { data: servers = [], isLoading: isDetecting, refetch: detectServers } = useLocalPgServers();
+  const loadDatabasesMutation = useLocalPgDatabases();
+  const createDatabaseMutation = useCreateDatabase();
 
   const loadDatabases = async (server: LocalPostgresServer, user: string, password: string) => {
-    const serverIndex = servers.findIndex(
-      (s) => s.host === server.host && s.port === server.port
-    );
-    if (serverIndex === -1) return;
-
-    setServers((prev) => {
-      const updated = [...prev];
-      updated[serverIndex] = { ...updated[serverIndex], loadingDatabases: true };
-      return updated;
-    });
-
     try {
-      const response = await fetch("/api/db/local-postgres/databases", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ host: server.host, port: server.port, user, password }),
-      });
-      const data = await response.json();
-
-      if (!response.ok) {
-        toast.error(data.error || "Failed to load databases");
-        setServers((prev) => {
-          const updated = [...prev];
-          updated[serverIndex] = { ...updated[serverIndex], loadingDatabases: false };
-          return updated;
+      const databases = await loadDatabasesMutation.mutateAsync({ host: server.host, port: server.port, user, password });
+      queryClient.setQueryData<LocalPostgresServer[]>(queryKeys.localPg.servers, (old) => {
+        if (!old) return old;
+        return old.map((s) => {
+          if (s.host === server.host && s.port === server.port) {
+            return { ...s, databases, expanded: true, loadingDatabases: false };
+          }
+          return s;
         });
-        return;
-      }
-
-      setServers((prev) => {
-        const updated = [...prev];
-        updated[serverIndex] = {
-          ...updated[serverIndex],
-          databases: data.databases || [],
-          loadingDatabases: false,
-        };
-        return updated;
       });
     } catch (error) {
       toast.error("Failed to load databases");
-      setServers((prev) => {
-        const updated = [...prev];
-        updated[serverIndex] = { ...updated[serverIndex], loadingDatabases: false };
-        return updated;
-      });
     }
   };
 
   const handleExpand = (server: LocalPostgresServer) => {
-    const idx = servers.findIndex((s) => s.host === server.host && s.port === server.port);
-    if (idx === -1) return;
-
     const isExpanding = !server.expanded;
-    setServers((prev) => {
-      const updated = [...prev];
-      updated[idx] = { ...updated[idx], expanded: isExpanding };
-      return updated;
+    
+    queryClient.setQueryData<LocalPostgresServer[]>(queryKeys.localPg.servers, (old) => {
+      if (!old) return old;
+      return old.map((s) => {
+        if (s.host === server.host && s.port === server.port) {
+          return { ...s, expanded: isExpanding };
+        }
+        return s;
+      });
     });
 
     if (isExpanding && !server.databases) {
@@ -139,12 +96,7 @@ export function LocalPostgresManager({
     if (!passwordForServer) return;
 
     if (savePassword) {
-      Persistence.setServerPassword(
-        passwordForServer.host,
-        passwordForServer.port,
-        tempUser,
-        tempPassword
-      );
+      Persistence.setServerPassword(passwordForServer.host, passwordForServer.port, tempUser, tempPassword);
     }
 
     if (pendingDatabase) {
@@ -226,22 +178,14 @@ export function LocalPostgresManager({
       return;
     }
 
-    setIsCreating(true);
     try {
-      const response = await fetch("/api/db/local-postgres/create-db", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          host: selectedServer.host,
-          port: selectedServer.port,
-          user: dbUser,
-          password: dbPassword || undefined,
-          databaseName: newDbName.trim(),
-        }),
+      await createDatabaseMutation.mutateAsync({
+        host: selectedServer.host,
+        port: selectedServer.port,
+        user: dbUser,
+        password: dbPassword || undefined,
+        databaseName: newDbName.trim(),
       });
-
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Failed to create database");
 
       toast.success(`Database "${newDbName}" created successfully`);
 
@@ -262,8 +206,6 @@ export function LocalPostgresManager({
       setConnectionName("");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to create database");
-    } finally {
-      setIsCreating(false);
     }
   };
 
@@ -279,7 +221,7 @@ export function LocalPostgresManager({
         <Button
           variant="outline"
           size="sm"
-          onClick={detectServers}
+          onClick={() => detectServers()}
           disabled={isDetecting}
           className={cn(isDetecting && "text-muted-foreground opacity-50")}
         >

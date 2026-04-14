@@ -15,7 +15,7 @@ import { SavedQueriesManager } from "@/components/saved-queries-manager";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Loader2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -24,20 +24,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Play, Plus, Eye, Bookmark, Save, Loader2 } from "lucide-react";
+import { Play, Plus, Eye, Bookmark, Save } from "lucide-react";
 import { SavedQueries } from "@/lib/query/saved-queries";
-import { getConnection } from "@/lib/connections/store";
+import { getConnectionAsyncAsync } from "@/lib/connections/store";
 import { Persistence } from "@/lib/persistence";
-import type { ConnectionConfig } from "@/lib/db/types";
+import type { ConnectionConfig, QueryResult } from "@/lib/db/types";
 import { DatabaseProvider } from "@/lib/db/providers";
 import { analyzeQuery, shouldBlockQuery, type QueryAnalysis } from "@/lib/query/classifier";
 import type { SavedQuery } from "@/lib/query/saved-queries";
-
-interface QueryResult {
-  rows: any[];
-  rowCount: number;
-  fields: Array<{ name: string; dataTypeID: number }>;
-}
+import { useExecuteQuery } from "@/lib/query/hooks/use-query";
+import { useConnect } from "@/lib/query/mutations/use-connect";
 
 function getDefaultQuery(provider?: DatabaseProvider): string {
   if (provider === DatabaseProvider.MONGODB) {
@@ -54,12 +50,12 @@ export default function QueryPage() {
   const params = useParams();
   const router = useRouter();
   const connectionId = params.connection as string;
+  
   const [connection, setConnection] = useState<ConnectionConfig | null>(null);
   const [queryTabs, setQueryTabs] = useState<QueryTab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const [result, setResult] = useState<QueryResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
   const [safeMode, setSafeMode] = useState(true);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [pendingQuery, setPendingQuery] = useState<string | null>(null);
@@ -77,24 +73,23 @@ export default function QueryPage() {
   const initializedRef = useRef<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  // Get current query from active tab
+  const { mutateAsync: executeQuery, isPending: queryLoading } = useExecuteQuery(connectionId);
+  const connectMutation = useConnect();
+
   const currentQuery = queryTabs.find((tab) => tab.id === activeTabId)?.query || "";
 
-  // Persist tabs whenever they change
   useEffect(() => {
     if (connectionId && queryTabs.length >= 0) {
       Persistence.setQueryTabs(connectionId, queryTabs);
     }
   }, [connectionId, queryTabs]);
 
-  // Persist active tab whenever it changes
   useEffect(() => {
     if (connectionId && activeTabId) {
       Persistence.setActiveQueryTabId(connectionId, activeTabId);
     }
   }, [connectionId, activeTabId]);
 
-  // Auto-save query content (debounced)
   const autoSaveQuery = useCallback(
     (tabId: string, query: string) => {
       if (autoSaveTimeoutRef.current) {
@@ -104,12 +99,11 @@ export default function QueryPage() {
         if (connectionId) {
           Persistence.setQueryTabContent(connectionId, tabId, query);
         }
-      }, 1000); // 1 second debounce
+      }, 1000);
     },
     [connectionId]
   );
 
-  // Update query in active tab
   const updateQuery = useCallback(
     (newQuery: string) => {
       if (!activeTabId) return;
@@ -124,7 +118,6 @@ export default function QueryPage() {
     [activeTabId, autoSaveQuery]
   );
 
-  // Create new query tab
   const createNewTab = useCallback(() => {
     const tabId = `query-${Date.now()}`;
     const newTab: QueryTab = {
@@ -136,18 +129,15 @@ export default function QueryPage() {
     setActiveTabId(tabId);
   }, [queryTabs.length, connection?.provider]);
 
-  // Select a tab
   const selectTab = useCallback((tabId: string) => {
     setActiveTabId(tabId);
   }, []);
 
-  // Close a tab
   const closeTab = useCallback(
     (tabId: string) => {
       setQueryTabs((prev) => {
         const filtered = prev.filter((tab) => tab.id !== tabId);
         if (filtered.length === 0) {
-          // If no tabs left, create a new one
           const newTabId = `query-${Date.now()}`;
           const newTab: QueryTab = {
             id: newTabId,
@@ -157,7 +147,6 @@ export default function QueryPage() {
           setActiveTabId(newTabId);
           return [newTab];
         }
-        // If closing active tab, switch to another one
         if (activeTabId === tabId) {
           const currentIndex = prev.findIndex((tab) => tab.id === tabId);
           const nextTab = filtered[currentIndex] || filtered[currentIndex - 1] || filtered[0];
@@ -169,7 +158,6 @@ export default function QueryPage() {
     [activeTabId, connection?.provider]
   );
 
-  // Rename a tab
   const renameTab = useCallback((tabId: string, newLabel: string) => {
     setQueryTabs((prev) => {
       const updated = prev.map((tab) =>
@@ -179,46 +167,28 @@ export default function QueryPage() {
     });
   }, []);
 
-  // Internal query execution function
   const executeQueryInternal = useCallback(async (query: string) => {
     if (!query.trim() || !activeTabId) return;
 
-    setLoading(true);
     setError(null);
     setResult(null);
 
     try {
-      const response = await fetch("/api/db/query", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query }),
-      });
+      const response = await executeQuery({ query });
 
-      const data = await response.json();
-
-      if (!response.ok || !data.success) {
-        const errorMsg = data.error || "Query failed";
-        setError(errorMsg);
-        toast.error("Query failed", {
-          description: errorMsg,
-        });
-        return;
-      }
-
-      // Handle EXPLAIN plan
-      if (data.data?.isExplain) {
-        setQueryPlan(data.data.plan);
+      if (response.data && "isExplain" in response.data && response.data.isExplain) {
+        setQueryPlan((response.data as any).plan);
         setShowPlan(true);
         setResult(null);
         toast.success("Query plan generated");
         return;
       }
 
-      setResult(data.data);
+      setResult(response.data || null);
       setQueryPlan(null);
       setShowPlan(false);
       toast.success("Query executed", {
-        description: `Returned ${data.data?.rowCount || 0} row${data.data?.rowCount !== 1 ? "s" : ""}`,
+        description: `Returned ${response.data?.rowCount || 0} row${response.data?.rowCount !== 1 ? "s" : ""}`,
       });
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : "Query failed";
@@ -226,12 +196,9 @@ export default function QueryPage() {
       toast.error("Query failed", {
         description: errorMsg,
       });
-    } finally {
-      setLoading(false);
     }
-  }, [activeTabId]);
+  }, [activeTabId, executeQuery]);
 
-  // Handle confirmation
   const handleConfirm = useCallback(async () => {
     if (pendingQuery) {
       setShowConfirmation(false);
@@ -247,11 +214,9 @@ export default function QueryPage() {
     setQueryAnalysis(null);
   }, []);
 
-  // Execute query
-  const executeQuery = useCallback(async () => {
+  const executeQueryClick = useCallback(async () => {
     if (!currentQuery.trim()) return;
     
-    // Check safe mode if enabled
     if (safeMode && connection) {
       const analysis = analyzeQuery(currentQuery);
       const blockResult = shouldBlockQuery(analysis, safeMode);
@@ -263,7 +228,6 @@ export default function QueryPage() {
         return;
       }
       
-      // If destructive, show confirmation dialog
       if (analysis.isDestructive) {
         setPendingQuery(currentQuery);
         setQueryAnalysis(analysis);
@@ -275,54 +239,53 @@ export default function QueryPage() {
     await executeQueryInternal(currentQuery);
   }, [currentQuery, executeQueryInternal, safeMode, connection]);
 
-  // Initialize connection and load saved tabs
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (initializedRef.current === connectionId) return;
 
-    const conn = getConnection(connectionId);
-    if (!conn) return;
+    getConnectionAsync(connectionId).then(conn => {
+      if (!conn) {
+        return;
+      }
 
-    initializedRef.current = connectionId;
-    setConnection(conn);
-    setSafeMode(Persistence.getSafeMode(connectionId));
-    Persistence.setActiveConnectionId(connectionId);
-    Persistence.setActiveView(connectionId, "query");
+      initializedRef.current = connectionId;
+      setConnection(conn);
+      setSafeMode(Persistence.getSafeMode(connectionId));
+      Persistence.setActiveConnectionId(connectionId);
+      Persistence.setActiveView(connectionId, "query");
 
-    // Auto-connect
-    fetch("/api/db/connect", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(conn),
-    })
-      .then(() => {
-        // Load saved tabs
-        const savedTabs = Persistence.getQueryTabs(connectionId);
-        const savedActiveTabId = Persistence.getActiveQueryTabId(connectionId);
+      const init = async () => {
+        try {
+          await connectMutation.mutateAsync({ config: conn });
+          
+          const savedTabs = Persistence.getQueryTabs(connectionId);
+          const savedActiveTabId = Persistence.getActiveQueryTabId(connectionId);
 
-        if (savedTabs.length > 0) {
-          setQueryTabs(savedTabs);
-          const activeTab =
-            savedActiveTabId && savedTabs.find((t) => t.id === savedActiveTabId)
-              ? savedTabs.find((t) => t.id === savedActiveTabId)!
-              : savedTabs[0];
-          setActiveTabId(activeTab.id);
-        } else {
-          // Create initial tab
-          const initialTabId = `query-${Date.now()}`;
-          const initialTab: QueryTab = {
-            id: initialTabId,
-            label: "Query 1",
-            query: getDefaultQuery(conn.provider),
-          };
-          setQueryTabs([initialTab]);
-          setActiveTabId(initialTabId);
+          if (savedTabs.length > 0) {
+            setQueryTabs(savedTabs);
+            const activeTab =
+              savedActiveTabId && savedTabs.find((t) => t.id === savedActiveTabId)
+                ? savedTabs.find((t) => t.id === savedActiveTabId)!
+                : savedTabs[0];
+            setActiveTabId(activeTab.id);
+          } else {
+            const initialTabId = `query-${Date.now()}`;
+            const initialTab: QueryTab = {
+              id: initialTabId,
+              label: "Query 1",
+              query: getDefaultQuery(conn.provider),
+            };
+            setQueryTabs([initialTab]);
+            setActiveTabId(initialTabId);
+          }
+        } catch (error) {
+          console.error("Failed to connect:", error);
         }
-      })
-      .catch(console.error);
-  }, [connectionId]);
+      };
 
-  // Cleanup auto-save timeout
+    init();
+  }, [connectionId, connectMutation]);
+
   useEffect(() => {
     return () => {
       if (autoSaveTimeoutRef.current) {
@@ -332,12 +295,10 @@ export default function QueryPage() {
   }, []);
 
   const handleRunSavedQuery = useCallback((query: string) => {
-    // Find active tab or create new one
     if (activeTabId) {
       updateQuery(query);
     } else {
       createNewTab();
-      // Wait a bit for tab to be created, then update
       setTimeout(() => {
         const newTabId = queryTabs[queryTabs.length - 1]?.id;
         if (newTabId) {
@@ -386,27 +347,34 @@ export default function QueryPage() {
     setSaveFormData({ name: "", tags: "", description: "" });
   }, [saveFormData, currentQuery, connection]);
 
-  // Redirect to connections page if connection not found (only after checking store)
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (!connectionId) return;
     
-    // Check if connection exists in store - if it does, never redirect
-    const conn = getConnection(connectionId);
-    if (conn) {
-      return; // Connection exists in store, let initialization handle it
+    if (connection) {
+      return;
     }
     
-    // Connection doesn't exist in store - redirect immediately
-    // (No need to wait, if it's not in the store, it doesn't exist)
-    const activeConnectionId = Persistence.getActiveConnectionId();
-    if (activeConnectionId === connectionId) {
-      Persistence.setActiveConnectionId(null);
+    if (!initializedRef.current) {
+      return;
     }
-    startTransition(() => {
-      router.push("/connections");
-    });
-  }, [connectionId, router]);
+  }, [connectionId, connection]);
+
+  if (!connection && !initializedRef.current) {
+    return (
+      <MainLayout>
+        <div className="flex flex-col h-full">
+          <div className="h-12 border-b border-border bg-muted/20 flex items-center px-4 shrink-0" />
+          <div className="flex-1 flex items-center justify-center">
+            <div className="flex flex-col items-center gap-3">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              <span className="text-sm text-muted-foreground">Loading...</span>
+            </div>
+          </div>
+        </div>
+      </MainLayout>
+    );
+  }
 
   if (!connection) {
     return (
@@ -432,7 +400,6 @@ export default function QueryPage() {
         <DatabaseNavbar connectionId={connection.id} />
         
         <div className="flex flex-1 min-h-0">
-          {/* Saved Queries Sidebar */}
           {showSavedQueries && (
             <div className="w-80 border-r border-border flex flex-col shrink-0">
               <SavedQueriesManager
@@ -444,7 +411,6 @@ export default function QueryPage() {
           )}
           
           <div className="flex flex-col flex-1 min-w-0">
-            {/* Query Tabs */}
             <QueryTabs
               tabs={queryTabs}
               activeTabId={activeTabId}
@@ -452,7 +418,6 @@ export default function QueryPage() {
               onTabClose={closeTab}
               onTabRename={renameTab}
             />
-            {/* Command Bar */}
             <div className="h-12 border-b border-border flex items-center gap-2 px-4 shrink-0 overflow-x-auto">
               <div className="flex items-center gap-2 min-w-max">
                 <Button
@@ -494,12 +459,12 @@ export default function QueryPage() {
                   }}
                   variant="outline"
                   size="sm"
-                  disabled={loading || !currentQuery.trim()}
+                  disabled={queryLoading || !currentQuery.trim()}
                 >
                   <Eye className="h-4 w-4 mr-2" />
                   Explain
                 </Button>
-                <Button onClick={executeQuery} disabled={loading || !currentQuery.trim()}>
+                <Button onClick={executeQueryClick} disabled={queryLoading || !currentQuery.trim()}>
                   <Play className="h-4 w-4 mr-2" />
                   Run Query
                 </Button>
@@ -509,18 +474,16 @@ export default function QueryPage() {
               </div>
             </div>
 
-            {/* Query Editor */}
             <div className="flex-1 min-h-0">
               <SQLEditor
                 value={currentQuery}
                 onChange={updateQuery}
-                onExecute={executeQuery}
-                disabled={loading}
+                onExecute={executeQueryClick}
+                disabled={queryLoading}
                 language={editorLanguage}
               />
             </div>
 
-            {/* Results / Plan */}
             <div className="h-96 border-t border-border shrink-0">
               {showPlan && queryPlan ? (
                 <QueryPlanViewer plan={queryPlan} className="h-full p-4" />
@@ -528,13 +491,12 @@ export default function QueryPage() {
                 <ResultsViewer
                   result={result}
                   error={error}
-                  loading={loading}
+                  loading={queryLoading}
                   provider={connection.provider}
                 />
               )}
             </div>
 
-            {/* Confirmation Dialog */}
             {queryAnalysis && (
               <QueryConfirmationDialog
                 open={showConfirmation}
@@ -546,7 +508,6 @@ export default function QueryPage() {
               />
             )}
 
-            {/* Save Query Dialog */}
             <Dialog open={showSaveDialog} onOpenChange={setShowSaveDialog}>
               <DialogContent>
                 <DialogHeader>

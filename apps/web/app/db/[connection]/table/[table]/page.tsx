@@ -1,17 +1,15 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { toast } from "sonner";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import { MainLayout } from "@/components/main-layout";
 import { ResultsViewer } from "@/components/results-viewer";
 import { PAGE_SIZE_OPTIONS } from "@/components/results-viewer";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-// import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-// import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { RefreshCw, Loader2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Check } from "lucide-react";
-import { getConnection } from "@/lib/connections/store";
+import { getConnectionAsyncAsync } from "@/lib/connections/store";
 import { Persistence } from "@/lib/persistence";
 import type { ConnectionConfig } from "@/lib/db/types";
 import type { ColumnInfo, IndexInfo, ConstraintInfo } from "@/lib/db/types";
@@ -26,7 +24,6 @@ interface QueryResult {
 
 export default function TablePage() {
   const params = useParams();
-  const router = useRouter();
   const connectionId = params.connection as string;
   const tablePath = params.table as string;
   const [schema, table] = tablePath.split(".");
@@ -41,6 +38,7 @@ export default function TablePage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(100);
   const [pageSizePopoverOpen, setPageSizePopoverOpen] = useState(false);
+  const initializedRef = useRef<string | null>(null);
 
   const isMongoDB = connection?.provider === DatabaseProvider.MONGODB;
   const totalRows = result?.rows?.length ?? 0;
@@ -49,34 +47,39 @@ export default function TablePage() {
   const endRow = Math.min(page * pageSize, totalRows);
 
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const conn = getConnection(connectionId);
-      if (conn) {
-        setConnection(conn);
-        // Auto-connect
-        fetch("/api/db/connect", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(conn),
-        }).then(() => {
-          loadTableData();
-          loadTableInfo();
-        }).catch(console.error);
+    if (typeof window === "undefined") return;
+    if (initializedRef.current === connectionId) return;
+    
+    getConnectionAsync(connectionId).then(conn => {
+      if (!conn) {
+        return;
       }
-    }
+
+      initializedRef.current = connectionId;
+      setConnection(conn);
+      Persistence.setActiveConnectionId(connectionId);
+      Persistence.setActiveView(connectionId, "tables");
+      
+      fetch("/api/db/connect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(conn),
+      }).then(() => {
+        loadTableData();
+        loadTableInfo();
+      }).catch(console.error);
+    });
   }, [connectionId, schema, table]);
 
   const loadTableData = async () => {
     setLoading(true);
     setError(null);
     try {
-      // Get connection if not already loaded
-      const conn = connection || getConnection(connectionId);
+      const conn = connection;
       if (!conn) {
         throw new Error("Connection not found");
       }
 
-      // Use query builder for provider-aware queries
       const { buildTableQuery } = await import("@/lib/db/query-builder");
       const { query, params } = buildTableQuery(schema, table, 10000, 0, conn.provider);
       
@@ -119,14 +122,12 @@ export default function TablePage() {
 
   const loadTableInfo = async () => {
     try {
-      // Get connection if not already loaded
-      const conn = connection || getConnection(connectionId);
+      const conn = connection;
       if (!conn) {
         console.warn("[TablePage] Connection not found for loadTableInfo");
         return;
       }
 
-      // Skip table info loading for MongoDB (no schemas/columns/indexes)
       if (conn.provider === DatabaseProvider.MONGODB) {
         setColumns([]);
         setIndexes([]);
@@ -245,31 +246,15 @@ export default function TablePage() {
     }
   }, [connection]);
 
-  // Redirect to connections page if connection not found (only after checking store)
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (!connectionId) return;
-    
-    // Check if connection exists in store - if it does, never redirect
-    const conn = getConnection(connectionId);
-    if (conn) {
-      return; // Connection exists in store, let loading handle it
-    }
-    
-    // Connection doesn't exist in store - redirect immediately
-    // (No need to wait, if it's not in the store, it doesn't exist)
-    const activeConnectionId = Persistence.getActiveConnectionId();
-    if (activeConnectionId === connectionId) {
-      Persistence.setActiveConnectionId(null);
-    }
-    router.push("/connections");
-  }, [connectionId, router]);
-
   const handlePageSizeChange = (newSize: number) => {
     setPageSize(newSize);
     setPage(1);
     setPageSizePopoverOpen(false);
   };
+
+  if (!connection && !initializedRef.current) {
+    return null;
+  }
 
   if (!connection) {
     return null; // Will redirect
