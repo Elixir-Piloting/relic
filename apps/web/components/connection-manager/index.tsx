@@ -17,6 +17,10 @@ interface ConnectionManagerProps {
   defaultOpen?: boolean;
   onDialogChange?: (open: boolean) => void;
   compact?: boolean;
+  dialogOpen?: boolean;
+  onDialogOpenChange?: (open: boolean) => void;
+  externalEditingConnection?: ConnectionConfig | null;
+  onEditConnection?: (connection: ConnectionConfig | null) => void;
 }
 
 const DEFAULT_FORM_DATA: Partial<ConnectionConfig> = {
@@ -36,18 +40,46 @@ export function ConnectionManager({
   defaultOpen = false,
   onDialogChange,
   compact = false,
+  dialogOpen,
+  onDialogOpenChange,
+  externalEditingConnection,
+  onEditConnection,
 }: ConnectionManagerProps) {
   const [connections, setConnections] = useState<ConnectionConfig[]>([]);
-  const [isDialogOpen, setIsDialogOpen] = useState(defaultOpen);
-  const [editingConnection, setEditingConnection] = useState<ConnectionConfig | null>(null);
+  const [internalDialogOpen, setInternalDialogOpen] = useState(defaultOpen);
+  const [internalEditingConnection, setInternalEditingConnection] = useState<ConnectionConfig | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [connectionToDelete, setConnectionToDelete] = useState<string | null>(null);
 
+  const isDialogOpen = dialogOpen !== undefined ? dialogOpen : internalDialogOpen;
+  const setIsDialogOpen = (open: boolean) => {
+    if (onDialogOpenChange) {
+      onDialogOpenChange(open);
+    } else {
+      setInternalDialogOpen(open);
+    }
+  };
+
+  const editingConnection = externalEditingConnection !== undefined ? externalEditingConnection : internalEditingConnection;
+  const setEditingConnection = (conn: ConnectionConfig | null) => {
+    if (onEditConnection) {
+      onEditConnection(conn);
+    } else {
+      setInternalEditingConnection(conn);
+    }
+  };
+
   useEffect(() => {
-    if (defaultOpen !== isDialogOpen) {
-      setIsDialogOpen(defaultOpen);
+    if (defaultOpen !== internalDialogOpen) {
+      setInternalDialogOpen(defaultOpen);
     }
   }, [defaultOpen]);
+
+  useEffect(() => {
+    if (externalEditingConnection !== undefined) {
+      setInternalEditingConnection(externalEditingConnection);
+    }
+  }, [externalEditingConnection]);
 
   useEffect(() => {
     const conns = loadConnections();
@@ -93,23 +125,40 @@ export function ConnectionManager({
   };
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-          Connections
-        </span>
+    <div className={compact ? "py-1.5" : "space-y-3"}>
+      {!compact && (
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            Connections
+          </span>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6"
+            onClick={() => {
+              setEditingConnection(null);
+              setIsDialogOpen(true);
+            }}
+          >
+            <Plus className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
+
+      {compact && (
         <Button
           variant="ghost"
-          size="icon"
-          className="h-6 w-6"
+          size="sm"
+          className="w-full justify-start h-8 text-sm"
           onClick={() => {
             setEditingConnection(null);
             setIsDialogOpen(true);
           }}
         >
-          <Plus className="h-4 w-4" />
+          <Plus className="h-4 w-4 mr-2" />
+          Add connection
         </Button>
-      </div>
+      )}
 
       {!compact && (
         <ConnectionList

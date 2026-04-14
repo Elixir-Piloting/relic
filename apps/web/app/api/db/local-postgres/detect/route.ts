@@ -8,6 +8,33 @@ interface LocalPostgresServer {
   accessible: boolean;
 }
 
+function dedupeServers(servers: LocalPostgresServer[]): LocalPostgresServer[] {
+  const seen = new Map<number, LocalPostgresServer>();
+  
+  for (const server of servers) {
+    const key = server.port;
+    const existing = seen.get(key);
+    
+    if (!existing) {
+      seen.set(key, server);
+    } else {
+      if (server.host === "localhost" && existing.host !== "localhost") {
+        seen.set(key, server);
+      } else if (!existing.version && server.version) {
+        seen.set(key, server);
+      } else if (existing.accessible !== server.accessible) {
+        if (existing.accessible) {
+          seen.set(key, existing);
+        } else {
+          seen.set(key, server);
+        }
+      }
+    }
+  }
+  
+  return Array.from(seen.values()).sort((a, b) => a.port - b.port);
+}
+
 /**
  * GET /api/db/local-postgres/detect - Detect local PostgreSQL servers
  */
@@ -16,8 +43,6 @@ export async function GET() {
   const commonPorts = [5432, 5433, 5434, 5435];
   const hosts = ["localhost", "127.0.0.1"];
 
-  // Try to detect PostgreSQL servers on common ports
-  // Use Promise.allSettled to check all ports concurrently
   const detectionPromises: Promise<LocalPostgresServer | null>[] = [];
   
   for (const host of hosts) {
@@ -25,19 +50,17 @@ export async function GET() {
       detectionPromises.push(
         (async (): Promise<LocalPostgresServer | null> => {
           try {
-            // Try connecting to postgres database (default database)
             const client = new Client({
               host,
               port,
               database: "postgres",
               user: process.env.USER || process.env.USERNAME || "postgres",
               password: "",
-              connectionTimeoutMillis: 1000, // Quick timeout for detection
+              connectionTimeoutMillis: 1000,
             });
 
             await client.connect();
             
-            // Get version
             const versionResult = await client.query("SELECT version()");
             const version = versionResult.rows[0]?.version || "Unknown";
             
@@ -50,19 +73,13 @@ export async function GET() {
               accessible: true,
             };
           } catch (error: any) {
-            // Connection failed, but check if it's a PostgreSQL server (wrong credentials vs no server)
-            if (error.code === "28P01" || error.message?.includes("password") || error.code === "ECONNREFUSED") {
-              // Check if it's actually a PostgreSQL server by trying to connect with a different error
-              // If we get authentication error, server exists
-              if (error.code === "28P01" || error.message?.includes("password")) {
-                return {
-                  host,
-                  port,
-                  accessible: false,
-                };
-              }
+            if (error.code === "28P01" || error.message?.includes("password")) {
+              return {
+                host,
+                port,
+                accessible: false,
+              };
             }
-            // Otherwise, no server on this port
             return null;
           }
         })()
@@ -74,8 +91,13 @@ export async function GET() {
   for (const result of results) {
     if (result.status === "fulfilled" && result.value) {
       servers.push(result.value);
+    } else if (result.status === "rejected") {
+      console.error("Server detection failed:", result.reason);
     }
   }
 
-  return NextResponse.json({ servers });
+  const dedupedServers = dedupeServers(servers);
+  console.log("Final detected servers:", dedupedServers);
+
+  return NextResponse.json({ servers: dedupedServers });
 }

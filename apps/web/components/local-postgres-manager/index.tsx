@@ -34,12 +34,21 @@ export function LocalPostgresManager({
   const [tempUser, setTempUser] = useState(process.env.USER || "postgres");
   const [pendingDatabase, setPendingDatabase] = useState<string | null>(null);
   const [savePassword, setSavePassword] = useState(false);
+  const [showNameDialog, setShowNameDialog] = useState(false);
+  const [pendingConnection, setPendingConnection] = useState<{
+    server: LocalPostgresServer;
+    database: string;
+    user?: string;
+    password?: string;
+  } | null>(null);
+  const [connectionNameToSave, setConnectionNameToSave] = useState("");
 
   const detectServers = async () => {
     setIsDetecting(true);
     try {
       const response = await fetch("/api/db/local-postgres/detect");
       const data = await response.json();
+      console.log("Detected servers:", data.servers);
       setServers(data.servers || []);
     } catch (error) {
       console.error("Failed to detect servers:", error);
@@ -171,18 +180,29 @@ export function LocalPostgresManager({
     finalUser = finalUser || dbUser;
     finalPassword = finalPassword || dbPassword;
 
+    setPendingConnection({ server, database, user: finalUser, password: finalPassword });
+    setConnectionNameToSave(database);
+    setShowNameDialog(true);
+  };
+
+  const handleSaveWithName = () => {
+    if (!pendingConnection) return;
+
     const config: ConnectionConfig = {
       id: `conn-${Date.now()}`,
-      name: `${server.host}:${server.port}/${database}`,
+      name: connectionNameToSave.trim() || pendingConnection.database,
       provider: DatabaseProvider.POSTGRESQL,
-      host: server.host,
-      port: server.port,
-      database,
-      user: finalUser,
-      password: finalPassword,
+      host: pendingConnection.server.host,
+      port: pendingConnection.server.port,
+      database: pendingConnection.database,
+      user: pendingConnection.user,
+      password: pendingConnection.password,
     };
 
     onServerSelect(config);
+    setShowNameDialog(false);
+    setPendingConnection(null);
+    setConnectionNameToSave("");
   };
 
   const handleCreateDatabase = async () => {
@@ -316,6 +336,40 @@ export function LocalPostgresManager({
               Cancel
             </Button>
             <Button onClick={handlePasswordSubmit}>Connect</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showNameDialog} onOpenChange={setShowNameDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Name your connection</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="grid gap-2">
+              <Label>Connection Name</Label>
+              <Input
+                value={connectionNameToSave}
+                onChange={(e) => setConnectionNameToSave(e.target.value)}
+                placeholder="My Database"
+                autoFocus
+              />
+            </div>
+            {pendingConnection && (
+              <p className="text-sm text-muted-foreground">
+                Connecting to: {pendingConnection.database}
+              </p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setShowNameDialog(false);
+              setPendingConnection(null);
+              setConnectionNameToSave("");
+            }}>
+              Cancel
+            </Button>
+            <Button onClick={handleSaveWithName}>Save</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

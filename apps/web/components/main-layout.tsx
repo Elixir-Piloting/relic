@@ -17,7 +17,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Plus, Database, ChevronDown, Loader2, Settings } from "lucide-react";
+import { Plus, Database, ChevronDown, Loader2, Settings, Pencil } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { getSubtleBackground } from "@/lib/utils/color";
@@ -32,7 +32,7 @@ function ProviderIcon({ provider }: { provider: DatabaseProvider }) {
   
   return (
     <div 
-      className="relative w-5 h-5 shrink-0 rounded-sm flex items-center justify-center"
+      className="relative w-4 h-4 shrink-0 rounded-sm flex items-center justify-center"
       style={{
         backgroundColor: getSubtleBackground(meta.color, 1.0),
       }}
@@ -44,7 +44,7 @@ function ProviderIcon({ provider }: { provider: DatabaseProvider }) {
         onError={(e) => {
           const parent = e.currentTarget.parentElement;
           if (parent) {
-            parent.innerHTML = `<span class="text-xs font-bold" style="color: ${meta.color === '#FFFFFF' || meta.color === '#000000' ? '#1d1d1f' : '#fff'}">${meta.name.charAt(0)}</span>`;
+            parent.innerHTML = `<span class="text-[8px] font-bold" style="color: ${meta.color === '#FFFFFF' || meta.color === '#000000' ? '#1d1d1f' : '#fff'}">${meta.name.charAt(0)}</span>`;
           }
         }}
       />
@@ -62,6 +62,8 @@ function MainLayoutContent({ children }: MainLayoutProps) {
   const [isConnectionLoading, setIsConnectionLoading] = useState(false);
   const [connectionsPopoverOpen, setConnectionsPopoverOpen] = useState(false);
   const [connectionsRefreshKey, setConnectionsRefreshKey] = useState(0);
+  const [connectionDialogOpen, setConnectionDialogOpen] = useState(false);
+  const [editingConnection, setEditingConnection] = useState<ConnectionConfig | null>(null);
 
   // Refresh connections list when popover opens
   useEffect(() => {
@@ -193,12 +195,12 @@ function MainLayoutContent({ children }: MainLayoutProps) {
         )}
       >
         {/* Connection selector - fixed at top */}
-        <div className="p-4 shrink-0">
+        <div className="px-4 py-4 shrink-0">
           <Popover open={connectionsPopoverOpen} onOpenChange={setConnectionsPopoverOpen}>
             <PopoverTrigger asChild>
               <Button
                 variant="outline"
-                className="w-full justify-between h-10 px-3"
+                className="w-full justify-between h-8 px-3 text-sm border-0 shadow-none focus:ring-0"
               >
                 {currentConnection ? (
                   <div className="flex items-center gap-2 min-w-0">
@@ -206,47 +208,63 @@ function MainLayoutContent({ children }: MainLayoutProps) {
                     <span className="truncate">{currentConnection.name}</span>
                   </div>
                 ) : (
-                  <span className="text-muted-foreground">Select connection</span>
+                  <span className="text-muted-foreground truncate">Select connection</span>
                 )}
                 <ChevronDown className="h-4 w-4 opacity-50 shrink-0 ml-2" />
               </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-[240px] p-1" align="start">
-              <div className="px-2 py-1.5">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">
-                  Connections
-                </p>
-              </div>
-              <div className="max-h-[300px] overflow-y-auto">
+            <PopoverContent className="w-[200px] p-0" align="start">
+              <div className="max-h-[200px] overflow-y-auto">
                 {allConnections.map((conn) => (
-                  <button
+                  <div
                     key={conn.id}
-                    onClick={() => handleConnectionSelect(conn)}
-                    disabled={isConnectionLoading}
                     className={cn(
-                      "w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors",
+                      "w-full flex items-center gap-2 px-3 py-1.5 text-sm transition-colors group",
                       "hover:bg-accent hover:text-accent-foreground",
                       currentConnection?.id === conn.id && "bg-accent text-accent-foreground"
                     )}
                   >
-                    <ProviderIcon provider={conn.provider} />
-                    <span className="truncate">{conn.name}</span>
-                  </button>
+                    <button
+                      onClick={() => handleConnectionSelect(conn)}
+                      disabled={isConnectionLoading}
+                      className="flex items-center gap-2 min-w-0 flex-1"
+                    >
+                      <ProviderIcon provider={conn.provider} />
+                      <span className="truncate">{conn.name}</span>
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditingConnection(conn);
+                        setConnectionDialogOpen(true);
+                      }}
+                      className="opacity-0 group-hover:opacity-100 p-1 hover:bg-accent-foreground/10 rounded transition-opacity"
+                    >
+                      <Pencil className="h-3 w-3" />
+                    </button>
+                  </div>
                 ))}
                 {allConnections.length === 0 && (
-                  <p className="px-3 py-4 text-xs text-muted-foreground text-center">
+                  <p className="px-3 py-3 text-sm text-muted-foreground text-center">
                     No connections
                   </p>
                 )}
               </div>
-              <div className="border-t mt-1 pt-1 px-1">
+              <div className="border-t px-1">
                 <ConnectionManager
                   onConnectionSelect={handleConnectionSelect}
                   currentConnectionId={currentConnection?.id}
                   compact
-                  onDialogChange={(open) => {
-                    if (!open) setConnectionsPopoverOpen(false);
+                  dialogOpen={connectionDialogOpen}
+                  onDialogOpenChange={(open) => {
+                    setConnectionDialogOpen(open);
+                    if (!open) {
+                      setConnectionsPopoverOpen(false);
+                      setEditingConnection(null);
+                    }
                   }}
+                  externalEditingConnection={editingConnection}
+                  onEditConnection={setEditingConnection}
                 />
               </div>
             </PopoverContent>
