@@ -1,0 +1,32 @@
+{
+  "name": "@relic/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/main.js",
+  "author": "Relic",
+  "description": "Relic Database Admin - Desktop App",
+  "scripts": {
+    "dev": "npm run compile && concurrently \"npm run dev:next\" \"wait-on http://localhost:3000 && electron .\"",
+    "dev:next": "cd ../web && npm run dev",
+    "build": "npm run build:next && npm run build:electron",
+    "build:next": "cd ../web && npm run build:electron",
+    "build:electron": "npm run compile && electron-builder",
+    "start": "npm run compile && electron .",
+    "lint": "eslint",
+    "compile": "tsc"
+  },
+  "dependencies": {
+    "@relic/shared": "*",
+    "@relic/web": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "concurrently": "^9.0.0",
+    "electron": "^30.5.1",
+    "electron-builder": "^24.13.3",
+    "typescript": "^5",
+    "wait-on": "^8.0.0"
+  }
+}
