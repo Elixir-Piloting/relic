@@ -17,7 +17,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Plus, Database, ChevronDown, Loader2, Settings, Pencil } from "lucide-react";
+import { Plus, Database, ChevronDown, Loader2, Settings, Pencil, Home } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { getSubtleBackground } from "@/lib/utils/color";
 import { Breadcrumbs } from "@/components/breadcrumbs";
@@ -25,6 +25,7 @@ import { useConnections } from "@/lib/query/hooks/use-connections";
 import { useConnect } from "@/lib/query/mutations/use-connect";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/query/keys";
+import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 
 interface MainLayoutProps {
   children: React.ReactNode;
@@ -220,19 +221,47 @@ function MainLayoutContent({ children }: MainLayoutProps) {
             onOpenNewTableTab={handleOpenNewTableTab}
           />
         </ScrollArea>
-        {/* Settings link */}
+        {/* Settings and Home row */}
         <div className="p-2 shrink-0">
-          <a
-            href="/settings"
-            onClick={(e) => {
-              e.preventDefault();
-              startTransition(() => router.push("/settings"));
-            }}
-            className="flex items-center gap-2 px-3 py-2 rounded-md text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-          >
-            <Settings className="h-4 w-4" />
-            Settings
-          </a>
+          <TooltipProvider>
+            <div className="flex space-x-2">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => startTransition(() => router.push("/"))}
+                    className="h-8 w-8"
+                    aria-label="Home"
+                  >
+                    <Home className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="right">
+                  <p>Home</p>
+                </TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      startTransition(() => router.push("/settings"));
+                    }}
+                    className="h-8 w-8"
+                    aria-label="Settings"
+                  >
+                    <Settings className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="right">
+                  <p>Settings</p>
+                </TooltipContent>
+              </Tooltip>
+            </div>
+          </TooltipProvider>
         </div>
       </div>
 

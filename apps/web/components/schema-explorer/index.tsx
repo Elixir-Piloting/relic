@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { Loader2, Plus, RefreshCw, Table as TableIcon } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -85,11 +85,11 @@ export function SchemaExplorer({
 
   const isRefreshingTables = tablesLoading;
 
-  useMemo(() => {
-    if (schemas.length > 0 && !selectedSchema) {
-      setSelectedSchema(schemas[0].name);
-    }
-  }, [schemas.length]);
+useEffect(() => {
+  if (schemas.length > 0 && !selectedSchema) {
+    setSelectedSchema(schemas[0].name);
+  }
+}, [schemas, selectedSchema]);
 
   const handleSchemaSelect = useCallback(async (schemaName: string) => {
     setSelectedSchema(schemaName);
