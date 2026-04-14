@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useTransition } from "react";
 import { toast } from "sonner";
 import { useRouter, usePathname } from "next/navigation";
 import { ConnectionManager } from "@/components/connection-manager";
@@ -10,10 +10,46 @@ import { Persistence } from "@/lib/persistence";
 import { getConnection, loadConnections } from "@/lib/connections/store";
 import { SidebarProvider, useSidebar } from "@/components/sidebar-context";
 import { cn } from "@/lib/utils";
+import { DatabaseProvider, getProviderMetadata } from "@/lib/db/providers";
 import type { ConnectionConfig } from "@/lib/db/types";
+import { Button } from "@/components/ui/button";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Plus, Database, ChevronDown, Loader2 } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { getSubtleBackground } from "@/lib/utils/color";
 
 interface MainLayoutProps {
   children: React.ReactNode;
+}
+
+function ProviderIcon({ provider }: { provider: DatabaseProvider }) {
+  const meta = getProviderMetadata(provider);
+  
+  return (
+    <div 
+      className="relative w-5 h-5 shrink-0 rounded-sm flex items-center justify-center"
+      style={{
+        backgroundColor: getSubtleBackground(meta.color, 1.0),
+      }}
+    >
+      <img
+        src={meta.icon}
+        alt={meta.name}
+        className="w-full h-full object-contain p-0.5"
+        onError={(e) => {
+          const parent = e.currentTarget.parentElement;
+          if (parent) {
+            parent.innerHTML = `<span class="text-xs font-bold" style="color: ${meta.color === '#FFFFFF' || meta.color === '#000000' ? '#1d1d1f' : '#fff'}">${meta.name.charAt(0)}</span>`;
+          }
+        }}
+      />
+    </div>
+  );
 }
 
 function MainLayoutContent({ children }: MainLayoutProps) {
@@ -22,6 +58,17 @@ function MainLayoutContent({ children }: MainLayoutProps) {
   const [currentConnection, setCurrentConnection] =
     useState<ConnectionConfig | null>(null);
   const { collapsed: sidebarCollapsed } = useSidebar();
+  const [isPending, startTransition] = useTransition();
+  const [isConnectionLoading, setIsConnectionLoading] = useState(false);
+  const [connectionsPopoverOpen, setConnectionsPopoverOpen] = useState(false);
+  const [connectionsRefreshKey, setConnectionsRefreshKey] = useState(0);
+
+  // Refresh connections list when popover opens
+  useEffect(() => {
+    if (connectionsPopoverOpen) {
+      setConnectionsRefreshKey((k) => k + 1);
+    }
+  }, [connectionsPopoverOpen]);
 
   // Restore active connection on mount and when pathname changes
   useEffect(() => {
@@ -55,6 +102,7 @@ function MainLayoutContent({ children }: MainLayoutProps) {
   }, [pathname]);
 
   // Periodically check if current connection still exists (in case it was deleted)
+  // Use slower polling - 5 seconds is sufficient for database management app
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (!currentConnection) return;
@@ -79,12 +127,13 @@ function MainLayoutContent({ children }: MainLayoutProps) {
         Persistence.setActiveConnectionId(null);
         setCurrentConnection(null);
       }
-    }, 1000); // Check every second
+    }, 5000); // Check every 5 seconds - sufficient for this use case
 
     return () => clearInterval(interval);
   }, [currentConnection]);
 
   const handleConnectionSelect = async (config: ConnectionConfig) => {
+    setIsConnectionLoading(true);
     try {
       const response = await fetch("/api/db/connect", {
         method: "POST",
@@ -104,15 +153,34 @@ function MainLayoutContent({ children }: MainLayoutProps) {
       Persistence.setActiveConnectionId(config.id);
       toast.success("Connected successfully");
       
-      // Navigate to last view for this connection
+      // Close popover
+      setConnectionsPopoverOpen(false);
+      
+      // Navigate to last view for this connection using transitions
       const lastView = Persistence.getActiveView(config.id) || "tables";
-      router.push(`/db/${config.id}${lastView === "query" ? "/query" : lastView === "visualizer" ? "/visualizer" : ""}`);
+      startTransition(() => {
+        router.push(`/db/${config.id}${lastView === "query" ? "/query" : lastView === "visualizer" ? "/visualizer" : ""}`);
+      });
     } catch (error) {
       toast.error("Connection failed", {
         description: error instanceof Error ? error.message : "Unknown error",
       });
+    } finally {
+      setIsConnectionLoading(false);
     }
   };
+
+  const handleTableSelect = (schema: string, table: string) => {
+    // Navigate to database view with table (client-side, no refresh)
+    if (currentConnection) {
+      startTransition(() => {
+        router.push(`/db/${currentConnection.id}?table=${schema}.${table}`);
+      });
+    }
+  };
+
+  // Load all connections for the popover (refresh when dialog changes)
+  const allConnections = connectionsRefreshKey >= 0 ? loadConnections() : [];
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
@@ -129,7 +197,7 @@ function MainLayoutContent({ children }: MainLayoutProps) {
             href="/"
             onClick={(e) => {
               e.preventDefault();
-              router.push("/");
+              startTransition(() => router.push("/"));
             }}
             className="w-8 h-8 shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
           >
@@ -139,36 +207,84 @@ function MainLayoutContent({ children }: MainLayoutProps) {
             href="/"
             onClick={(e) => {
               e.preventDefault();
-              router.push("/");
+              startTransition(() => router.push("/"));
             }}
             className="text-lg font-semibold cursor-pointer hover:opacity-80 transition-opacity"
           >
             Relic
           </a>
         </div>
-        <div className="flex-1 overflow-y-auto">
-          <div className="p-6 border-b border-border">
-            <ConnectionManager
-              onConnectionSelect={handleConnectionSelect}
-              currentConnectionId={currentConnection?.id}
-            />
-          </div>
-          <div className="p-6">
-            <SchemaExplorer
-              connectionId={currentConnection?.id}
-              onTableSelect={(schema, table) => {
-                // Navigate to database view with table (client-side, no refresh)
-                if (currentConnection) {
-                  router.push(`/db/${currentConnection.id}?table=${schema}.${table}`);
-                }
-              }}
-              onTableCreated={() => {
-                // Could trigger a refresh of the schema explorer
-                window.location.reload();
-              }}
-            />
-          </div>
+        {/* Connection selector - fixed at top */}
+        <div className="p-4 border-b border-border shrink-0">
+          <Popover open={connectionsPopoverOpen} onOpenChange={setConnectionsPopoverOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                className="w-full justify-between h-10 px-3"
+              >
+                {currentConnection ? (
+                  <div className="flex items-center gap-2 min-w-0">
+                    <ProviderIcon provider={currentConnection.provider} />
+                    <span className="truncate">{currentConnection.name}</span>
+                  </div>
+                ) : (
+                  <span className="text-muted-foreground">Select connection</span>
+                )}
+                <ChevronDown className="h-4 w-4 opacity-50 shrink-0 ml-2" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[240px] p-1" align="start">
+              <div className="px-2 py-1.5">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+                  Connections
+                </p>
+              </div>
+              <div className="max-h-[300px] overflow-y-auto">
+                {allConnections.map((conn) => (
+                  <button
+                    key={conn.id}
+                    onClick={() => handleConnectionSelect(conn)}
+                    disabled={isConnectionLoading}
+                    className={cn(
+                      "w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors",
+                      "hover:bg-accent hover:text-accent-foreground",
+                      currentConnection?.id === conn.id && "bg-accent text-accent-foreground"
+                    )}
+                  >
+                    <ProviderIcon provider={conn.provider} />
+                    <span className="truncate">{conn.name}</span>
+                  </button>
+                ))}
+                {allConnections.length === 0 && (
+                  <p className="px-3 py-4 text-xs text-muted-foreground text-center">
+                    No connections
+                  </p>
+                )}
+              </div>
+              <div className="border-t mt-1 pt-1 px-1">
+                <ConnectionManager
+                  onConnectionSelect={handleConnectionSelect}
+                  currentConnectionId={currentConnection?.id}
+                  compact
+                  onDialogChange={(open) => {
+                    if (!open) setConnectionsPopoverOpen(false);
+                  }}
+                />
+              </div>
+            </PopoverContent>
+          </Popover>
         </div>
+        {/* Schema explorer - scrollable */}
+        <ScrollArea className="flex-1 p-4">
+          <SchemaExplorer
+            connectionId={currentConnection?.id}
+            onTableSelect={handleTableSelect}
+            onTableCreated={() => {
+              // Refresh schema - the SchemaExplorer will handle this internally
+              // No need for full page reload
+            }}
+          />
+        </ScrollArea>
       </div>
 
       {/* Main Content */}
