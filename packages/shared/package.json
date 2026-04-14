@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "better-sqlite3": "^12.6.0",
+    "clsx": "^2.1.1",
     "mongodb": "^7.0.0",
     "mysql2": "^3.16.0",
     "pg": "^8.16.3",

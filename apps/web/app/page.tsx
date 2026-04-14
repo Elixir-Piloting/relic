@@ -70,7 +70,7 @@ export default function Home() {
                     // Refresh connections when dialog closes
                     const updatedConnections = loadConnections();
                     setConnections(updatedConnections);
-                    
+
                     // If no connections left, ensure active connection is cleared
                     if (updatedConnections.length === 0) {
                       Persistence.setActiveConnectionId(null);

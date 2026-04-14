@@ -6,18 +6,17 @@
   "author": "Relic",
   "description": "Relic Database Admin - Desktop App",
   "scripts": {
-    "dev": "npm run compile && concurrently \"npm run dev:next\" \"wait-on http://localhost:3000 && electron .\"",
-    "dev:next": "cd ../web && npm run dev",
-    "build": "npm run build:next && npm run build:electron",
-    "build:next": "cd ../web && npm run build:electron",
-    "build:electron": "npm run compile && electron-builder",
-    "start": "npm run compile && electron .",
+    "dev": "pnpm run compile && concurrently \"pnpm run dev:next\" \"wait-on http://localhost:3000 && electron .\"",
+    "dev:next": "pnpm --filter @relic/web dev",
+    "build": "pnpm run build:next && pnpm run build:electron",
+    "build:next": "pnpm --filter @relic/web build:electron",
+    "build:electron": "pnpm run compile && electron-builder",
+    "start": "pnpm run compile && electron .",
     "lint": "eslint",
     "compile": "tsc"
   },
   "dependencies": {
-    "@relic/shared": "*",
-    "@relic/web": "*"
+    "@relic/shared": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^20",

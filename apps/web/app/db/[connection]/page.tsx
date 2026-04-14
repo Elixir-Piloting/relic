@@ -1,16 +1,17 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useTransition } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { MainLayout } from "@/components/main-layout";
 import { DatabaseNavbar } from "@/components/database-navbar";
 import { TableTabs, type TableTab } from "@/components/table-tabs";
 import { CreateTableDialog } from "@/components/create-table-dialog";
-import { ResultsViewer } from "@/components/results-viewer";
+import { ResultsViewer, PAGE_SIZE_OPTIONS } from "@/components/results-viewer";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { RefreshCw, X, Loader2 } from "lucide-react";
+import { RefreshCw, X, Loader2, Plus, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Check } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
 import { getConnection } from "@/lib/connections/store";
 import { Persistence } from "@/lib/persistence";
 import type { ConnectionConfig } from "@/lib/db/types";
@@ -24,6 +25,58 @@ interface QueryResult {
   fields: Array<{ name: string; dataTypeID: number }>;
 }
 
+function TableLoadingSkeleton() {
+  return (
+    <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="h-14 border-b border-border flex items-center justify-between px-6 shrink-0 bg-muted/20">
+        <div>
+          <Skeleton className="h-5 w-32 mb-1" />
+          <Skeleton className="h-3 w-16" />
+        </div>
+        <div className="flex items-center gap-2">
+          <Skeleton className="h-8 w-20" />
+        </div>
+      </div>
+      <div className="flex-1 overflow-hidden">
+        <div className="h-full flex flex-col">
+          <div className="flex items-center gap-4 mx-6 mt-4">
+            <Skeleton className="h-8 w-16" />
+            <Skeleton className="h-8 w-20" />
+            <Skeleton className="h-8 w-20" />
+            <Skeleton className="h-8 w-28" />
+          </div>
+          <div className="flex-1 mt-4 overflow-auto px-6 pb-6">
+            <div className="bg-card rounded-lg border border-border p-4">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    {Array.from({ length: 5 }).map((_, i) => (
+                      <TableHead key={i}>
+                        <Skeleton className="h-4 w-24" />
+                      </TableHead>
+                    ))}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {Array.from({ length: 8 }).map((_, i) => (
+                    <TableRow key={i}>
+                      {Array.from({ length: 5 }).map((_, j) => (
+                        <TableCell key={j}>
+                          <Skeleton className="h-4 w-full" />
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function DatabasePage() {
   const params = useParams();
   const router = useRouter();
@@ -34,6 +87,10 @@ export default function DatabasePage() {
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const initializedRef = useRef<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [activePage, setActivePage] = useState(1);
+  const [activePageSize, setActivePageSize] = useState(100);
+  const [pageSizePopoverOpen, setPageSizePopoverOpen] = useState(false);
+  const [isPending, startTransition] = useTransition();
 
   // Persist tabs whenever they change
   useEffect(() => {
@@ -362,6 +419,7 @@ export default function DatabasePage() {
   }, [connectionId, openTable, loadTableData, loadTableInfo]);
 
   // Watch for URL parameter changes (for when navigating from schema explorer)
+  // Use searchParams hook instead of polling for better performance
   useEffect(() => {
     if (typeof window === "undefined") return;
     
@@ -393,8 +451,9 @@ export default function DatabasePage() {
     // Check immediately
     checkUrlParams();
 
-    // Poll for URL changes (since router.push might not trigger popstate immediately)
-    const interval = setInterval(checkUrlParams, 50);
+    // Use a more reasonable polling interval (200ms instead of 50ms)
+    // This is still responsive but much more efficient
+    const interval = setInterval(checkUrlParams, 200);
 
     // Also listen for popstate events (back/forward navigation)
     window.addEventListener("popstate", checkUrlParams);
@@ -440,11 +499,20 @@ export default function DatabasePage() {
     if (activeConnectionId === connectionId) {
       Persistence.setActiveConnectionId(null);
     }
-    router.push("/connections");
+    startTransition(() => {
+      router.push("/connections");
+    });
   }, [connectionId, router]); // Remove 'connection' from deps to avoid re-running when connection loads
 
   if (!connection) {
-    return null; // Will redirect
+    return (
+      <MainLayout>
+        <div className="flex flex-col h-full">
+          <DatabaseNavbar connectionId="" />
+          <TableLoadingSkeleton />
+        </div>
+      </MainLayout>
+    );
   }
 
   return (
@@ -465,18 +533,22 @@ export default function DatabasePage() {
           {activeTab ? (
             <div className="flex-1 flex flex-col overflow-hidden">
               {/* Header */}
-              <div className="h-14 border-b border-border flex items-center justify-between px-6 shrink-0 bg-muted/20">
-                <div>
-                  <h1 className="text-lg font-semibold">{activeTab.table}</h1>
-                  <p className="text-xs text-muted-foreground">{activeTab.schema}</p>
-                </div>
-                <div className="flex items-center gap-2">
+              {/* Header with pagination */}
+              <div className="h-auto min-h-12 border-b border-border flex items-center justify-between px-6 py-2 shrink-0 bg-muted/20 gap-4">
+                <div className="flex items-center gap-3 shrink-0">
                   <CreateTableDialog schema={activeTab.schema} onTableCreated={() => {
                     // Refresh schema explorer would go here
                   }} />
+                  {activeData?.result && (
+                    <Button variant="outline" size="sm" onClick={() => {
+                      // Open insert row dialog
+                    }}>
+                      <Plus className="h-4 w-4 mr-1" /> Insert
+                    </Button>
+                  )}
                   <Button
                     variant="outline"
-                    size="sm"
+                    size="icon"
                     disabled={isRefreshing}
                     className={cn(
                       isRefreshing && "text-muted-foreground opacity-50"
@@ -496,140 +568,115 @@ export default function DatabasePage() {
                     }}
                   >
                     {isRefreshing ? (
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
-                      <RefreshCw className="h-4 w-4 mr-2" />
+                      <RefreshCw className="h-4 w-4" />
                     )}
-                    Refresh
                   </Button>
                 </div>
+
+                {/* Pagination controls */}
+                {activeData?.result && (
+                  <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                    <span className="text-xs">
+                      {activeData.result.rowCount.toLocaleString()} {connection?.provider === DatabaseProvider.MONGODB ? "document" : "row"}{activeData.result.rowCount !== 1 ? "s" : ""}
+                    </span>
+                    <span className="text-border">·</span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs">Rows per page</span>
+                      <Popover open={pageSizePopoverOpen} onOpenChange={setPageSizePopoverOpen}>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 px-2 text-xs font-medium min-w-[3.5rem]"
+                          >
+                            {activePageSize}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-28 p-1" align="start">
+                          <div className="flex flex-col">
+                            {PAGE_SIZE_OPTIONS.map((size) => (
+                              <button
+                                key={size}
+                                onClick={() => { setActivePageSize(size); setActivePage(1); setPageSizePopoverOpen(false); }}
+                                className={cn(
+                                  "flex items-center justify-between rounded-sm px-2 py-1.5 text-sm cursor-pointer transition-colors",
+                                  "hover:bg-accent hover:text-accent-foreground",
+                                  activePageSize === size && "bg-accent text-accent-foreground font-medium"
+                                )}
+                              >
+                                <span>{size}</span>
+                                {activePageSize === size && <Check className="h-3.5 w-3.5" />}
+                              </button>
+                            ))}
+                          </div>
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                    <span className="text-border">·</span>
+                    {(() => {
+                      const totalPages = Math.max(1, Math.ceil(activeData.result.rowCount / activePageSize));
+                      const startRow = activeData.result.rowCount > 0 ? (activePage - 1) * activePageSize + 1 : 0;
+                      const endRow = Math.min(activePage * activePageSize, activeData.result.rowCount);
+                      return (
+                        <>
+                          <span className="tabular-nums text-xs">
+                            {startRow}–{endRow} of {activeData.result.rowCount.toLocaleString()}
+                          </span>
+                          <span className="text-xs">
+                            ({activePage}/{totalPages})
+                          </span>
+                          <div className="flex items-center gap-0.5">
+                            <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => setActivePage(1)} disabled={activePage <= 1} title="First page">
+                              <ChevronsLeft className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => setActivePage(p => Math.max(1, p - 1))} disabled={activePage <= 1} title="Previous page">
+                              <ChevronLeft className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => setActivePage(p => p + 1)} disabled={activePage >= totalPages} title="Next page">
+                              <ChevronRight className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => setActivePage(totalPages)} disabled={activePage >= totalPages} title="Last page">
+                              <ChevronsRight className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </div>
+                )}
               </div>
 
-              {/* Content */}
-              <div className="flex-1 overflow-hidden">
-                <Tabs defaultValue="data" className="h-full flex flex-col">
-                  <TabsList className="mx-6 mt-4 justify-start">
-                    <TabsTrigger value="data">Data</TabsTrigger>
-                    <TabsTrigger value="columns">Columns</TabsTrigger>
-                    <TabsTrigger value="indexes">Indexes</TabsTrigger>
-                    <TabsTrigger value="constraints">Constraints</TabsTrigger>
-                  </TabsList>
-
-                  <TabsContent value="data" className="flex-1 mt-4 overflow-hidden px-6 pb-6">
-                    <ResultsViewer
-                      result={activeData?.result || null}
-                      error={activeData?.error || null}
-                      loading={activeData?.loading || false}
-                      schema={activeTab?.schema}
-                      table={activeTab?.table}
-                      columns={activeData?.columns || []}
-                      primaryKeys={
-                        connection?.provider === DatabaseProvider.MONGODB
-                          ? ["_id"]
-                          : activeData?.constraints
-                              ?.filter((c) => c.type === "PRIMARY KEY")
-                              .flatMap((c) => c.columns) || []
-                      }
-                      onRefresh={() => {
-                        if (activeTab) {
-                          loadTableData(activeTab.schema, activeTab.table, activeTab.id);
-                        }
-                      }}
-                      enableCRUD={!!activeTab}
-                      provider={connection?.provider}
-                    />
-                  </TabsContent>
-
-                  <TabsContent value="columns" className="flex-1 mt-4 overflow-auto px-6 pb-6">
-                    <div className="bg-card rounded-lg border border-border p-4">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Name</TableHead>
-                            <TableHead>Type</TableHead>
-                            <TableHead>Nullable</TableHead>
-                            <TableHead>Default</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {activeData?.columns.map((col) => (
-                            <TableRow key={col.name}>
-                              <TableCell className="font-mono font-medium">{col.name}</TableCell>
-                              <TableCell>
-                                {col.dataType}
-                                {col.characterMaximumLength && (
-                                  <span className="text-muted-foreground ml-1">
-                                    ({col.characterMaximumLength})
-                                  </span>
-                                )}
-                              </TableCell>
-                              <TableCell>{col.isNullable ? "YES" : "NO"}</TableCell>
-                              <TableCell className="font-mono text-xs">
-                                {col.defaultValue || "—"}
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  </TabsContent>
-
-                  <TabsContent value="indexes" className="flex-1 mt-4 overflow-auto px-6 pb-6">
-                    <div className="bg-card rounded-lg border border-border p-4">
-                      {activeData?.indexes.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">No indexes</p>
-                      ) : (
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Name</TableHead>
-                              <TableHead>Columns</TableHead>
-                              <TableHead>Unique</TableHead>
-                              <TableHead>Primary</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {activeData?.indexes.map((idx) => (
-                              <TableRow key={idx.name}>
-                                <TableCell className="font-mono">{idx.name}</TableCell>
-                                <TableCell>{idx.columns.join(", ")}</TableCell>
-                                <TableCell>{idx.isUnique ? "Yes" : "No"}</TableCell>
-                                <TableCell>{idx.isPrimary ? "Yes" : "No"}</TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      )}
-                    </div>
-                  </TabsContent>
-
-                  <TabsContent value="constraints" className="flex-1 mt-4 overflow-auto px-6 pb-6">
-                    <div className="bg-card rounded-lg border border-border p-4">
-                      {activeData?.constraints.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">No constraints</p>
-                      ) : (
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Name</TableHead>
-                              <TableHead>Type</TableHead>
-                              <TableHead>Columns</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {activeData?.constraints.map((constraint) => (
-                              <TableRow key={constraint.name}>
-                                <TableCell className="font-mono">{constraint.name}</TableCell>
-                                <TableCell>{constraint.type}</TableCell>
-                                <TableCell>{constraint.columns.join(", ")}</TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      )}
-                    </div>
-                  </TabsContent>
-                </Tabs>
+              {/* Content - direct data view */}
+              <div className="flex-1 overflow-hidden px-6 pb-6 pt-4">
+                <ResultsViewer
+                  result={activeData?.result || null}
+                  error={activeData?.error || null}
+                  loading={activeData?.loading || false}
+                  schema={activeTab?.schema}
+                  table={activeTab?.table}
+                  columns={activeData?.columns || []}
+                  primaryKeys={
+                    connection?.provider === DatabaseProvider.MONGODB
+                      ? ["_id"]
+                      : activeData?.constraints
+                          ?.filter((c) => c.type === "PRIMARY KEY")
+                          .flatMap((c) => c.columns) || []
+                  }
+                  onRefresh={() => {
+                    if (activeTab) {
+                      loadTableData(activeTab.schema, activeTab.table, activeTab.id);
+                    }
+                  }}
+                  enableCRUD={!!activeTab}
+                  provider={connection?.provider}
+                  page={activePage}
+                  pageSize={activePageSize}
+                  onPageChange={setActivePage}
+                  onPageSizeChange={(size) => { setActivePageSize(size); setActivePage(1); }}
+                  showPagination={false}
+                />
               </div>
             </div>
           ) : (

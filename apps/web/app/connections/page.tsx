@@ -31,7 +31,8 @@ export default function ConnectionsPage() {
     refreshConnections();
 
     // Periodically refresh connections (in case they're deleted from sidebar)
-    const interval = setInterval(refreshConnections, 1000);
+    // Use 3 second interval - sufficient for connection management
+    const interval = setInterval(refreshConnections, 3000);
     return () => clearInterval(interval);
   }, []);
 

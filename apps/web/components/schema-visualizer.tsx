@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { useTheme } from "next-themes";
 import { Key, Download, ZoomIn, ZoomOut, Maximize2, Lock, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -52,10 +53,28 @@ const COLUMN_HEIGHT = 24;
 const TABLE_MIN_WIDTH = 220;
 const TABLE_PADDING = 12;
 
+function getThemeColors(isDark: boolean) {
+  return {
+    background: isDark ? "hsl(240, 6%, 5%)" : "hsl(0, 0%, 98%)",
+    surface: isDark ? "hsl(240, 6%, 8%)" : "hsl(0, 0%, 100%)",
+    surfaceHover: isDark ? "hsl(240, 6%, 10%)" : "hsl(0, 0%, 96%)",
+    border: isDark ? "hsl(240, 4%, 18%)" : "hsl(0, 0%, 90%)",
+    text: isDark ? "hsl(0, 0%, 96%)" : "hsl(240, 6%, 10%)",
+    textMuted: isDark ? "hsl(240, 5%, 55%)" : "hsl(240, 4%, 40%)",
+    primary: "hsl(212, 100%, 55%)",
+    primaryLight: "hsl(212, 100%, 65%)",
+    primaryLighter: "hsl(212, 100%, 70%)",
+    warning: "hsl(45, 93%, 58%)",
+    minimapBg: isDark ? "hsl(240, 4%, 14%)" : "hsl(0, 0%, 95%)",
+  };
+}
+
 export function SchemaVisualizer({
   connectionId,
   onTableSelect,
 }: SchemaVisualizerProps) {
+  const { resolvedTheme } = useTheme();
+  const isDark = resolvedTheme === "dark";
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [tables, setTables] = useState<TableNode[]>([]);
@@ -390,19 +409,18 @@ export function SchemaVisualizer({
     const container = containerRef.current;
     if (!container) return;
 
-    // Get display size (CSS pixels) - account for device pixel ratio
     const dpr = window.devicePixelRatio || 1;
     const rect = container.getBoundingClientRect();
     const displayWidth = rect.width;
     const displayHeight = rect.height;
 
-    // Enable crisp text rendering
     ctx.textBaseline = "middle";
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
 
-    // Clear canvas with background color
-    ctx.fillStyle = "hsl(240, 10%, 4%)";
+    const colors = getThemeColors(isDark);
+
+    ctx.fillStyle = colors.background;
     ctx.fillRect(0, 0, displayWidth, displayHeight);
 
     // Apply zoom and pan
@@ -463,8 +481,8 @@ export function SchemaVisualizer({
 
       // Draw orthogonal path with rounded corners
       ctx.strokeStyle = selectedTable === rel.from || selectedTable === rel.to
-        ? "hsl(221, 83%, 53%)"
-        : "hsl(221, 83%, 45%)";
+        ? colors.primary
+        : colors.primaryLight;
       ctx.lineWidth = selectedTable === rel.from || selectedTable === rel.to ? 2.5 : 1.5;
       ctx.setLineDash([]);
       
@@ -538,18 +556,18 @@ export function SchemaVisualizer({
       const labelWidth = labelMetrics.width + labelPadding * 2;
       const labelHeight = 18;
       
-      ctx.fillStyle = "hsl(240, 10%, 8%)";
+      ctx.fillStyle = colors.surface;
       ctx.strokeStyle = selectedTable === rel.from || selectedTable === rel.to
-        ? "hsl(221, 83%, 53%)"
-        : "hsl(221, 83%, 40%)";
+        ? colors.primary
+        : colors.primary;
       ctx.lineWidth = 1;
       ctx.fillRect(labelX - labelWidth / 2, labelY - labelHeight / 2, labelWidth, labelHeight);
       ctx.strokeRect(labelX - labelWidth / 2, labelY - labelHeight / 2, labelWidth, labelHeight);
       
       // Draw label text
       ctx.fillStyle = selectedTable === rel.from || selectedTable === rel.to
-        ? "hsl(221, 83%, 70%)"
-        : "hsl(221, 83%, 55%)";
+        ? colors.primaryLight
+        : colors.primary;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.fillText(displayLabel, labelX, labelY);
@@ -562,8 +580,8 @@ export function SchemaVisualizer({
       const arrowSpread = Math.PI / 6;
 
       ctx.strokeStyle = selectedTable === rel.from || selectedTable === rel.to
-        ? "hsl(221, 83%, 53%)"
-        : "hsl(221, 83%, 45%)";
+        ? colors.primary
+        : colors.primaryLight;
       ctx.fillStyle = ctx.strokeStyle;
       ctx.beginPath();
       ctx.moveTo(toX, toY);
@@ -606,13 +624,13 @@ export function SchemaVisualizer({
 
       // Draw table box with crisp borders
       ctx.fillStyle = isDragging 
-        ? "hsl(240, 10%, 10%)" 
+        ? colors.surfaceHover 
         : isSelected 
-        ? "hsl(240, 10%, 8%)" 
-        : "hsl(240, 10%, 6%)";
+        ? colors.surface 
+        : colors.background;
       ctx.strokeStyle = isDragging || isSelected
-        ? "hsl(221, 83%, 53%)"
-        : "hsl(240, 3.7%, 25%)";
+        ? colors.primary
+        : colors.border;
       ctx.lineWidth = isDragging ? 2.5 : isSelected ? 2 : 1.5;
 
       // Draw rounded corners for table (subtle)
@@ -633,8 +651,8 @@ export function SchemaVisualizer({
 
       // Draw header with crisp styling
       ctx.fillStyle = isSelected
-        ? "hsl(221, 83%, 53%)"
-        : "hsl(240, 3.7%, 22%)";
+        ? colors.primary
+        : isDark ? "hsl(240, 3.7%, 22%)" : "hsl(0, 0%, 94%)";
       ctx.beginPath();
       ctx.moveTo(table.x + radius, table.y);
       ctx.lineTo(table.x + table.width - radius, table.y);
@@ -648,15 +666,15 @@ export function SchemaVisualizer({
       
       // Header border
       ctx.strokeStyle = isSelected
-        ? "hsl(221, 83%, 53%)"
-        : "hsl(240, 3.7%, 30%)";
+        ? colors.primary
+        : isDark ? "hsl(240, 3.7%, 30%)" : "hsl(0, 0%, 88%)";
       ctx.lineWidth = 1;
       ctx.stroke();
 
       // Draw table name in header with crisp font
       ctx.fillStyle = isSelected
         ? "hsl(0, 0%, 100%)"
-        : "hsl(0, 0%, 98%)";
+        : colors.text;
       ctx.font = "600 13px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
       ctx.textAlign = "left";
       ctx.textBaseline = "middle";
@@ -688,7 +706,7 @@ export function SchemaVisualizer({
         const iconX = table.x + table.width - iconAreaWidth;
 
         // Column name with truncation
-        ctx.fillStyle = "hsl(0, 0%, 98%)";
+        ctx.fillStyle = colors.text;
         ctx.font = "11px system-ui, -apple-system, sans-serif";
         let columnNameText = column.name;
         const nameMetrics = ctx.measureText(columnNameText);
@@ -702,7 +720,7 @@ export function SchemaVisualizer({
         ctx.fillText(columnNameText, columnNameX, y);
 
         // Column type with truncation and smaller font if needed
-        ctx.fillStyle = "hsl(240, 5%, 65%)";
+        ctx.fillStyle = colors.textMuted;
         let typeText = column.type;
         let typeFontSize = 10;
         ctx.font = `${typeFontSize}px system-ui, -apple-system, sans-serif`;
@@ -726,7 +744,7 @@ export function SchemaVisualizer({
 
         // Primary key icon
         if (column.isPrimaryKey) {
-          ctx.fillStyle = "hsl(45, 93%, 58%)";
+          ctx.fillStyle = colors.warning;
           ctx.font = "9px system-ui, -apple-system, sans-serif";
           ctx.textAlign = "right";
           ctx.fillText("PK", iconX, y);
@@ -735,7 +753,7 @@ export function SchemaVisualizer({
 
         // Foreign key icon
         if (column.isForeignKey) {
-          ctx.fillStyle = "hsl(221, 83%, 53%)";
+          ctx.fillStyle = colors.primary;
           ctx.font = "9px system-ui, -apple-system, sans-serif";
           ctx.textAlign = "right";
           const fkX = column.isPrimaryKey ? iconX - 25 : iconX;
@@ -746,7 +764,7 @@ export function SchemaVisualizer({
     });
 
     ctx.restore();
-  }, [tables, relationships, selectedTable, zoom, pan, dragTable]);
+  }, [tables, relationships, selectedTable, zoom, pan, dragTable, isDark]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -1014,7 +1032,7 @@ export function SchemaVisualizer({
       <div
         ref={containerRef}
         className="flex-1 overflow-hidden relative"
-        style={{ backgroundColor: "hsl(240, 10%, 4%)" }}
+        style={{ backgroundColor: isDark ? "hsl(240, 6%, 5%)" : "hsl(0, 0%, 98%)" }}
       >
         <canvas
           ref={canvasRef}
@@ -1066,7 +1084,7 @@ export function SchemaVisualizer({
               style={{
                 width: 200,
                 height: 150,
-                backgroundColor: "hsl(240, 3.7%, 16%)",
+                backgroundColor: isDark ? "hsl(240, 4%, 14%)" : "hsl(0, 0%, 95%)",
               }}
             >
               <svg
@@ -1090,8 +1108,8 @@ export function SchemaVisualizer({
                       y={y}
                       width={w}
                       height={h}
-                      fill="hsl(221, 83%, 53%, 0.3)"
-                      stroke="hsl(221, 83%, 53%)"
+                      fill="hsl(212, 100%, 55%, 0.3)"
+                      stroke="hsl(212, 100%, 55%)"
                       strokeWidth={1}
                     />
                   );

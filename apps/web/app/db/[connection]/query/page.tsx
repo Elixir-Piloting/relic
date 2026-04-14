@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useTransition } from "react";
 import { toast } from "sonner";
 import { useParams, useRouter } from "next/navigation";
 import { MainLayout } from "@/components/main-layout";
@@ -15,6 +15,7 @@ import { SavedQueriesManager } from "@/components/saved-queries-manager";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog,
   DialogContent,
@@ -23,7 +24,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Play, Plus, Eye, Bookmark, Save } from "lucide-react";
+import { Play, Plus, Eye, Bookmark, Save, Loader2 } from "lucide-react";
 import { SavedQueries } from "@/lib/query/saved-queries";
 import { getConnection } from "@/lib/connections/store";
 import { Persistence } from "@/lib/persistence";
@@ -74,6 +75,7 @@ export default function QueryPage() {
   });
   const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const initializedRef = useRef<string | null>(null);
+  const [isPending, startTransition] = useTransition();
 
   // Get current query from active tab
   const currentQuery = queryTabs.find((tab) => tab.id === activeTabId)?.query || "";
@@ -401,11 +403,25 @@ export default function QueryPage() {
     if (activeConnectionId === connectionId) {
       Persistence.setActiveConnectionId(null);
     }
-    router.push("/connections");
-  }, [connectionId, router]); // Remove 'connection' from deps to avoid re-running when connection loads
+    startTransition(() => {
+      router.push("/connections");
+    });
+  }, [connectionId, router]);
 
   if (!connection) {
-    return null; // Will redirect
+    return (
+      <MainLayout>
+        <div className="flex flex-col h-full">
+          <div className="h-12 border-b border-border bg-muted/20 flex items-center px-4 shrink-0" />
+          <div className="flex-1 flex items-center justify-center">
+            <div className="flex flex-col items-center gap-3">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              <span className="text-sm text-muted-foreground">Loading...</span>
+            </div>
+          </div>
+        </div>
+      </MainLayout>
+    );
   }
 
   const editorLanguage = getEditorLanguage(connection.provider);

@@ -5,7 +5,6 @@ import { toast } from "sonner";
 import { useRouter, usePathname } from "next/navigation";
 import { ConnectionManager } from "@/components/connection-manager";
 import { SchemaExplorer } from "@/components/schema-explorer";
-import { AppLogo } from "@/components/app-logo";
 import { Persistence } from "@/lib/persistence";
 import { getConnection, loadConnections } from "@/lib/connections/store";
 import { SidebarProvider, useSidebar } from "@/components/sidebar-context";
@@ -18,10 +17,11 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Plus, Database, ChevronDown, Loader2 } from "lucide-react";
+import { Plus, Database, ChevronDown, Loader2, Settings } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { getSubtleBackground } from "@/lib/utils/color";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 
 interface MainLayoutProps {
   children: React.ReactNode;
@@ -192,30 +192,8 @@ function MainLayoutContent({ children }: MainLayoutProps) {
           "shrink-0"
         )}
       >
-        <div className="h-12 border-b border-border flex items-center gap-3 px-4 py-2 shrink-0">
-          <a
-            href="/"
-            onClick={(e) => {
-              e.preventDefault();
-              startTransition(() => router.push("/"));
-            }}
-            className="w-8 h-8 shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
-          >
-            <AppLogo />
-          </a>
-          <a
-            href="/"
-            onClick={(e) => {
-              e.preventDefault();
-              startTransition(() => router.push("/"));
-            }}
-            className="text-lg font-semibold cursor-pointer hover:opacity-80 transition-opacity"
-          >
-            Relic
-          </a>
-        </div>
         {/* Connection selector - fixed at top */}
-        <div className="p-4 border-b border-border shrink-0">
+        <div className="p-4 shrink-0">
           <Popover open={connectionsPopoverOpen} onOpenChange={setConnectionsPopoverOpen}>
             <PopoverTrigger asChild>
               <Button
@@ -285,10 +263,28 @@ function MainLayoutContent({ children }: MainLayoutProps) {
             }}
           />
         </ScrollArea>
+        {/* Settings link */}
+        <div className="p-2 shrink-0">
+          <a
+            href="/settings"
+            onClick={(e) => {
+              e.preventDefault();
+              startTransition(() => router.push("/settings"));
+            }}
+            className="flex items-center gap-2 px-3 py-2 rounded-md text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+          >
+            <Settings className="h-4 w-4" />
+            Settings
+          </a>
+        </div>
       </div>
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden bg-background">
+        {/* Breadcrumb navigation */}
+        <div className="h-10 border-b border-border flex items-center px-6 shrink-0 bg-muted/10">
+          <Breadcrumbs />
+        </div>
         {children}
       </div>
     </div>
