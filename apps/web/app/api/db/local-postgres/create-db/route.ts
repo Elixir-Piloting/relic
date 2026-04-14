@@ -14,22 +14,22 @@ const CreateDatabaseSchema = z.object({
  * POST /api/db/local-postgres/create-db - Create a new database on a local PostgreSQL server
  */
 export async function POST(request: NextRequest) {
+  let client: Client | null = null;
+  
   try {
     const body = await request.json();
     const { host, port, user, password, databaseName } = CreateDatabaseSchema.parse(body);
 
-    // Connect to postgres database (default database) to create new database
-    const client = new Client({
+    client = new Client({
       host,
       port,
-      database: "postgres", // Connect to default database
+      database: "postgres",
       user,
       password: password || "",
     });
 
     await client.connect();
 
-    // Check if database already exists
     const checkResult = await client.query(
       "SELECT 1 FROM pg_database WHERE datname = $1",
       [databaseName]
@@ -37,16 +37,16 @@ export async function POST(request: NextRequest) {
 
     if (checkResult.rows.length > 0) {
       await client.end();
+      client = null;
       return NextResponse.json(
         { error: `Database "${databaseName}" already exists` },
         { status: 400 }
       );
     }
 
-    // Create the database
-    // Note: CREATE DATABASE cannot be parameterized, so we need to validate the name
     if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(databaseName)) {
       await client.end();
+      client = null;
       return NextResponse.json(
         { error: "Invalid database name. Only letters, numbers, and underscores are allowed." },
         { status: 400 }
@@ -55,6 +55,7 @@ export async function POST(request: NextRequest) {
 
     await client.query(`CREATE DATABASE "${databaseName}"`);
     await client.end();
+    client = null;
 
     return NextResponse.json({
       success: true,
@@ -62,8 +63,13 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error("[Create DB API] Error:", error);
-    const errorMessage = error instanceof Error ? error.message : "Failed to create database";
     
+    if (client) {
+      try { await client.end(); } catch {}
+      client = null;
+    }
+    
+    const errorMessage = error instanceof Error ? error.message : "Failed to create database";
     return NextResponse.json(
       { error: errorMessage },
       { status: 500 }

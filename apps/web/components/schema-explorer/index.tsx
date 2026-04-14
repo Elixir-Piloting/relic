@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { Loader2, Plus, RefreshCw } from "lucide-react";
+import { Loader2, Plus, RefreshCw, Table as TableIcon } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -468,6 +468,7 @@ export function SchemaExplorer({
                       onClick={() => onTableSelect?.(table.schema, table.name)}
                       className="flex-1 flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm hover:bg-accent/50 transition-colors text-muted-foreground hover:text-foreground"
                     >
+                      <TableIcon className="h-4 w-4 shrink-0" />
                       <span className="flex-1 text-left">{table.name}</span>
                       {table.rowCount !== undefined && (
                         <span className="text-xs text-muted-foreground">
@@ -493,6 +494,7 @@ export function SchemaExplorer({
                 onClick={() => onTableSelect?.(table.schema, table.name)}
                 className="w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm hover:bg-accent/50 transition-colors text-muted-foreground hover:text-foreground"
               >
+                <TableIcon className="h-4 w-4 shrink-0" />
                 <span className="flex-1 text-left">{table.name}</span>
                 {table.rowCount !== undefined && (
                   <span className="text-xs text-muted-foreground">

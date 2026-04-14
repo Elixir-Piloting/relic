@@ -48,7 +48,6 @@ export function LocalPostgresManager({
     try {
       const response = await fetch("/api/db/local-postgres/detect");
       const data = await response.json();
-      console.log("Detected servers:", data.servers);
       setServers(data.servers || []);
     } catch (error) {
       console.error("Failed to detect servers:", error);
@@ -82,6 +81,16 @@ export function LocalPostgresManager({
       });
       const data = await response.json();
 
+      if (!response.ok) {
+        toast.error(data.error || "Failed to load databases");
+        setServers((prev) => {
+          const updated = [...prev];
+          updated[serverIndex] = { ...updated[serverIndex], loadingDatabases: false };
+          return updated;
+        });
+        return;
+      }
+
       setServers((prev) => {
         const updated = [...prev];
         updated[serverIndex] = {
@@ -92,6 +101,7 @@ export function LocalPostgresManager({
         return updated;
       });
     } catch (error) {
+      toast.error("Failed to load databases");
       setServers((prev) => {
         const updated = [...prev];
         updated[serverIndex] = { ...updated[serverIndex], loadingDatabases: false };

@@ -13,22 +13,23 @@ const ListDatabasesSchema = z.object({
  * POST /api/db/local-postgres/databases - List databases on a PostgreSQL server
  */
 export async function POST(request: NextRequest) {
+  let client: Client | null = null;
+  
   try {
     const body = await request.json();
     const { host, port, user, password } = ListDatabasesSchema.parse(body);
 
-    // Connect to postgres database (default database) to list databases
-    const client = new Client({
+    client = new Client({
       host,
       port,
-      database: "postgres", // Connect to default database
+      database: "postgres",
       user,
       password: password || "",
+      connectionTimeoutMillis: 5000,
     });
 
     await client.connect();
 
-    // List all databases (excluding system databases)
     const result = await client.query(`
       SELECT datname 
       FROM pg_database 
@@ -38,17 +39,28 @@ export async function POST(request: NextRequest) {
     `);
 
     await client.end();
-
-    const databases = result.rows.map((row) => row.datname);
+    client = null;
 
     return NextResponse.json({
       success: true,
-      databases,
+      databases: result.rows.map((row) => row.datname),
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error("[List Databases API] Error:", error);
-    const errorMessage = error instanceof Error ? error.message : "Failed to list databases";
     
+    if (client) {
+      try { await client.end(); } catch {}
+      client = null;
+    }
+    
+    if (error.code === "53300") {
+      return NextResponse.json(
+        { error: "Server has too many connections. Try closing other PostgreSQL clients.", databases: [] },
+        { status: 503 }
+      );
+    }
+    
+    const errorMessage = error instanceof Error ? error.message : "Failed to list databases";
     return NextResponse.json(
       { error: errorMessage },
       { status: 500 }

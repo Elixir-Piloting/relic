@@ -49,8 +49,9 @@ export async function GET() {
     for (const port of commonPorts) {
       detectionPromises.push(
         (async (): Promise<LocalPostgresServer | null> => {
+          let client = null;
           try {
-            const client = new Client({
+            client = new Client({
               host,
               port,
               database: "postgres",
@@ -65,6 +66,7 @@ export async function GET() {
             const version = versionResult.rows[0]?.version || "Unknown";
             
             await client.end();
+            client = null;
 
             return {
               host,
@@ -73,14 +75,22 @@ export async function GET() {
               accessible: true,
             };
           } catch (error: any) {
-            if (error.code === "28P01" || error.message?.includes("password")) {
-              return {
-                host,
-                port,
-                accessible: false,
-              };
+            // Always try to close the client
+            if (client) {
+              try { await client.end(); } catch {}
+              client = null;
             }
-            return null;
+            
+            // ECONNREFUSED means no server, any other error means server IS running
+            if (error.code === "ECONNREFUSED") {
+              return null;
+            }
+            // Server exists but needs auth or has connection limits
+            return {
+              host,
+              port,
+              accessible: false,
+            };
           }
         })()
       );
@@ -91,13 +101,10 @@ export async function GET() {
   for (const result of results) {
     if (result.status === "fulfilled" && result.value) {
       servers.push(result.value);
-    } else if (result.status === "rejected") {
-      console.error("Server detection failed:", result.reason);
     }
   }
 
   const dedupedServers = dedupeServers(servers);
-  console.log("Final detected servers:", dedupedServers);
 
   return NextResponse.json({ servers: dedupedServers });
 }

@@ -116,8 +116,8 @@ export function ServerList({
                   ))}
                 </div>
               ) : (
-                <div className="text-sm text-muted-foreground py-2">
-                  No databases found
+                <div className="text-sm text-muted-foreground py-2 text-center">
+                  {server.accessible ? "No user databases" : "Enter password to view databases"}
                 </div>
               )}
             </div>

@@ -59,6 +59,7 @@ export class PostgreSQLAdapter implements DatabaseAdapter {
       user: connectionParams.user,
       password: connectionParams.password,
       ssl: connectionParams.ssl ? { rejectUnauthorized: false } : false,
+      connectionTimeoutMillis: 10000,
     });
 
     await this.client.connect();
