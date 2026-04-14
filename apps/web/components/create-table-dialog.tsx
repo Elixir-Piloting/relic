@@ -54,11 +54,13 @@ const COLUMN_TYPES = [
 interface CreateTableDialogProps {
   schema?: string;
   onTableCreated?: () => void;
+  openInPage?: boolean;
 }
 
 export function CreateTableDialog({
   schema = "public",
   onTableCreated,
+  openInPage = false,
 }: CreateTableDialogProps) {
   const [open, setOpen] = useState(false);
   const [tableName, setTableName] = useState("");
@@ -93,7 +95,6 @@ export function CreateTableDialog({
     const updated = [...columns];
     updated[index] = { ...updated[index], [field]: value };
     
-    // Only one primary key allowed
     if (field === "primaryKey" && value) {
       updated.forEach((col, i) => {
         if (i !== index) col.primaryKey = false;
@@ -127,7 +128,6 @@ export function CreateTableDialog({
     }
 
     try {
-      // Build CREATE TABLE SQL
       const columnDefs = columns.map((col) => {
         let def = `"${col.name}" ${col.type}`;
         if (!col.nullable) def += " NOT NULL";
@@ -182,6 +182,154 @@ export function CreateTableDialog({
     }
   };
 
+  const formContent = (
+    <div className="space-y-4 py-4">
+      <div className="grid gap-2">
+        <Label htmlFor="table-name">Table Name</Label>
+        <Input
+          id="table-name"
+          value={tableName}
+          onChange={(e) => setTableName(e.target.value)}
+          placeholder="users"
+        />
+      </div>
+
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <Label>Columns</Label>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={addColumn}
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Add Column
+          </Button>
+        </div>
+
+        <div className="space-y-3 max-h-[400px] overflow-y-auto">
+          {columns.map((column, index) => (
+            <div
+              key={index}
+              className="p-4 border border-border rounded-lg space-y-3"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">Column {index + 1}</span>
+                {columns.length > 1 && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => removeColumn(index)}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="grid gap-2">
+                  <Label htmlFor={`col-name-${index}`}>Name</Label>
+                  <Input
+                    id={`col-name-${index}`}
+                    value={column.name}
+                    onChange={(e) =>
+                      updateColumn(index, "name", e.target.value)
+                    }
+                    placeholder="column_name"
+                  />
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor={`col-type-${index}`}>Type</Label>
+                  <Select
+                    value={column.type}
+                    onValueChange={(value) =>
+                      updateColumn(index, "type", value)
+                    }
+                  >
+                    <SelectTrigger id={`col-type-${index}`}>
+                      <SelectValue placeholder="Select type" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-[300px]">
+                      {COLUMN_TYPES.map((type) => (
+                        <SelectItem key={type} value={type}>
+                          {type}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    id={`col-nullable-${index}`}
+                    checked={column.nullable}
+                    onChange={(e) =>
+                      updateColumn(index, "nullable", e.target.checked)
+                    }
+                    className="rounded border-border"
+                  />
+                  <Label htmlFor={`col-nullable-${index}`}>Nullable</Label>
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    id={`col-pk-${index}`}
+                    checked={column.primaryKey}
+                    onChange={(e) =>
+                      updateColumn(index, "primaryKey", e.target.checked)
+                    }
+                    className="rounded border-border"
+                  />
+                  <Label htmlFor={`col-pk-${index}`}>Primary Key</Label>
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor={`col-default-${index}`}>Default</Label>
+                  <Input
+                    id={`col-default-${index}`}
+                    value={column.defaultValue}
+                    onChange={(e) =>
+                      updateColumn(index, "defaultValue", e.target.value)
+                    }
+                    placeholder="optional"
+                    className="text-xs"
+                  />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+
+  if (openInPage) {
+    return (
+      <div className="h-full flex flex-col">
+        <div className="mb-6">
+          <h2 className="text-lg font-semibold">Create New Table</h2>
+          <p className="text-sm text-muted-foreground">
+            Define the table structure in schema: {schema}
+          </p>
+        </div>
+        {formContent}
+        <div className="flex gap-2 pt-4 border-t">
+          <Button variant="outline" onClick={() => onTableCreated?.()}>
+            Cancel
+          </Button>
+          <Button onClick={handleCreate}>Create Table</Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
@@ -196,131 +344,7 @@ export function CreateTableDialog({
             Define the table structure in schema: {schema}
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-4 py-4">
-          <div className="grid gap-2">
-            <Label htmlFor="table-name">Table Name</Label>
-            <Input
-              id="table-name"
-              value={tableName}
-              onChange={(e) => setTableName(e.target.value)}
-              placeholder="users"
-            />
-          </div>
-
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <Label>Columns</Label>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={addColumn}
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Add Column
-              </Button>
-            </div>
-
-            <div className="space-y-3 max-h-[400px] overflow-y-auto">
-              {columns.map((column, index) => (
-                <div
-                  key={index}
-                  className="p-4 border border-border rounded-lg space-y-3"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">Column {index + 1}</span>
-                    {columns.length > 1 && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => removeColumn(index)}
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    )}
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="grid gap-2">
-                      <Label htmlFor={`col-name-${index}`}>Name</Label>
-                      <Input
-                        id={`col-name-${index}`}
-                        value={column.name}
-                        onChange={(e) =>
-                          updateColumn(index, "name", e.target.value)
-                        }
-                        placeholder="column_name"
-                      />
-                    </div>
-
-                    <div className="grid gap-2">
-                      <Label htmlFor={`col-type-${index}`}>Type</Label>
-                      <Select
-                        value={column.type}
-                        onValueChange={(value) =>
-                          updateColumn(index, "type", value)
-                        }
-                      >
-                        <SelectTrigger id={`col-type-${index}`}>
-                          <SelectValue placeholder="Select type" />
-                        </SelectTrigger>
-                        <SelectContent className="max-h-[300px]">
-                          {COLUMN_TYPES.map((type) => (
-                            <SelectItem key={type} value={type}>
-                              {type}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-3">
-                    <div className="flex items-center space-x-2">
-                      <input
-                        type="checkbox"
-                        id={`col-nullable-${index}`}
-                        checked={column.nullable}
-                        onChange={(e) =>
-                          updateColumn(index, "nullable", e.target.checked)
-                        }
-                        className="rounded border-border"
-                      />
-                      <Label htmlFor={`col-nullable-${index}`}>Nullable</Label>
-                    </div>
-
-                    <div className="flex items-center space-x-2">
-                      <input
-                        type="checkbox"
-                        id={`col-pk-${index}`}
-                        checked={column.primaryKey}
-                        onChange={(e) =>
-                          updateColumn(index, "primaryKey", e.target.checked)
-                        }
-                        className="rounded border-border"
-                      />
-                      <Label htmlFor={`col-pk-${index}`}>Primary Key</Label>
-                    </div>
-
-                    <div className="grid gap-2">
-                      <Label htmlFor={`col-default-${index}`}>Default</Label>
-                      <Input
-                        id={`col-default-${index}`}
-                        value={column.defaultValue}
-                        onChange={(e) =>
-                          updateColumn(index, "defaultValue", e.target.value)
-                        }
-                        placeholder="optional"
-                        className="text-xs"
-                      />
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+        {formContent}
         <DialogFooter>
           <Button variant="outline" onClick={() => setOpen(false)}>
             Cancel

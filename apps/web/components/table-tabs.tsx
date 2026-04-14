@@ -9,6 +9,7 @@ export interface TableTab {
   schema: string;
   table: string;
   label: string;
+  type?: "view" | "create";
 }
 
 interface TableTabsProps {

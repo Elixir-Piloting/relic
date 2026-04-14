@@ -18,6 +18,7 @@ import type { ConnectionConfig } from "@/lib/db/types";
 import type { ColumnInfo, IndexInfo, ConstraintInfo } from "@/lib/db/types";
 import { DatabaseProvider } from "@/lib/db/providers";
 import { cn } from "@/lib/utils";
+import { useSchemaRefresh } from "@/components/schema-refresh-context";
 
 interface QueryResult {
   rows: any[];
@@ -91,6 +92,7 @@ export default function DatabasePage() {
   const [activePageSize, setActivePageSize] = useState(100);
   const [pageSizePopoverOpen, setPageSizePopoverOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const { triggerRefresh } = useSchemaRefresh();
 
   // Persist tabs whenever they change
   useEffect(() => {
@@ -362,6 +364,56 @@ export default function DatabasePage() {
     });
   }, [connectionId, loadTableData, loadTableInfo]);
 
+  const openNewTableTab = useCallback((schema: string) => {
+    const tabId = `__create_table__`;
+    
+    setTableTabs((prevTabs) => {
+      const existingTab = prevTabs.find((t) => t.id === tabId);
+      
+      if (existingTab) {
+        setActiveTabId(tabId);
+        if (connectionId) {
+          Persistence.setActiveTabId(connectionId, tabId);
+        }
+        return prevTabs;
+      }
+      
+      const newTab: TableTab = {
+        id: tabId,
+        schema,
+        table: "",
+        label: "New Table",
+        type: "create",
+      };
+      const updatedTabs = [...prevTabs, newTab];
+      setActiveTabId(tabId);
+      
+      return updatedTabs;
+    });
+  }, [connectionId]);
+
+  const closeTab = useCallback((tabId: string) => {
+    setTableTabs((prevTabs) => {
+      const newTabs = prevTabs.filter((t) => t.id !== tabId);
+      
+      if (activeTabId === tabId) {
+        const closedIndex = prevTabs.findIndex((t) => t.id === tabId);
+        const newActiveTab = newTabs[closedIndex] || newTabs[closedIndex - 1] || null;
+        setActiveTabId(newActiveTab?.id || null);
+        if (connectionId && newActiveTab) {
+          Persistence.setActiveTabId(connectionId, newActiveTab.id);
+        }
+      }
+      
+      return newTabs;
+    });
+    setTableData((prev) => {
+      const newData = new Map(prev);
+      newData.delete(tabId);
+      return newData;
+    });
+  }, [activeTabId, connectionId]);
+
   useEffect(() => {
     if (typeof window === "undefined") return;
     
@@ -385,13 +437,20 @@ export default function DatabasePage() {
       if (typeof window !== "undefined") {
         const urlParams = new URLSearchParams(window.location.search);
         const tableParam = urlParams.get("table");
+        const newTableParam = urlParams.get("newTable");
+        
+        if (newTableParam) {
+          window.history.replaceState({}, "", `/db/${connectionId}`);
+          openNewTableTab(newTableParam);
+          return;
+        }
+        
         if (tableParam) {
           const [schema, table] = tableParam.split(".");
           if (schema && table) {
-            // Clear the URL param after opening to avoid reopening on refresh
             window.history.replaceState({}, "", `/db/${connectionId}`);
             openTable(schema, table);
-            return; // Don't load saved tabs if we're opening a new one
+            return;
           }
         }
       }
@@ -409,14 +468,14 @@ export default function DatabasePage() {
         setActiveTabId(activeTabToLoad.id);
         // Load data for all tabs, but prioritize the active one
         savedTabs.forEach((tab) => {
-          if (tab.id === activeTabToLoad.id) {
+          if (tab.id === activeTabToLoad.id && tab.type !== "create") {
             loadTableData(tab.schema, tab.table, tab.id);
             loadTableInfo(tab.schema, tab.table, tab.id);
           }
         });
       }
     }).catch(console.error);
-  }, [connectionId, openTable, loadTableData, loadTableInfo]);
+  }, [connectionId, openTable, openNewTableTab, loadTableData, loadTableInfo]);
 
   // Watch for URL parameter changes (for when navigating from schema explorer)
   // Use searchParams hook instead of polling for better performance
@@ -428,22 +487,29 @@ export default function DatabasePage() {
     const checkUrlParams = () => {
       const urlParams = new URLSearchParams(window.location.search);
       const tableParam = urlParams.get("table");
+      const newTableParam = urlParams.get("newTable");
       
-      // Only process if it's a new table param (different from last one)
+      // Handle new table tab
+      if (newTableParam && newTableParam !== lastTableParam) {
+        console.log("[DatabasePage] URL param detected, opening new table tab:", newTableParam);
+        lastTableParam = newTableParam;
+        window.history.replaceState({}, "", `/db/${connectionId}`);
+        openNewTableTab(newTableParam);
+        return;
+      }
+      
+      // Handle existing table
       if (tableParam && tableParam !== lastTableParam) {
         const [schema, table] = tableParam.split(".");
         if (schema && table) {
           console.log("[DatabasePage] URL param detected, opening table:", schema, table);
           lastTableParam = tableParam;
           
-          // Clear the URL param first to prevent re-triggering
           window.history.replaceState({}, "", `/db/${connectionId}`);
           
-          // Then open the table
           openTable(schema, table);
         }
-      } else if (!tableParam) {
-        // Reset lastTableParam when URL param is cleared
+      } else if (!tableParam && !newTableParam) {
         lastTableParam = null;
       }
     };
@@ -462,22 +528,7 @@ export default function DatabasePage() {
       clearInterval(interval);
       window.removeEventListener("popstate", checkUrlParams);
     };
-  }, [connectionId, openTable]);
-
-  const closeTab = (tabId: string) => {
-    const newTabs = tableTabs.filter((t) => t.id !== tabId);
-    setTableTabs(newTabs);
-    
-    const newActiveTabId = activeTabId === tabId 
-      ? (newTabs.length > 0 ? newTabs[newTabs.length - 1].id : null)
-      : activeTabId;
-    
-    setActiveTabId(newActiveTabId);
-    
-    const newData = new Map(tableData);
-    newData.delete(tabId);
-    setTableData(newData);
-  };
+  }, [connectionId, openTable, openNewTableTab]);
 
   const activeTab = tableTabs.find((t) => t.id === activeTabId);
   const activeData = activeTab ? tableData.get(activeTab.id) : null;
@@ -533,8 +584,10 @@ export default function DatabasePage() {
           {activeTab ? (
             <div className="flex-1 flex flex-col overflow-hidden">
               {/* Header */}
-              {/* Header with pagination */}
-              <div className="h-auto min-h-12 border-b border-border flex items-center justify-between px-6 py-2 shrink-0 bg-muted/20 gap-4">
+              <div className={cn(
+                "h-auto min-h-12 border-b border-border flex items-center justify-between px-6 py-2 shrink-0 bg-muted/20 gap-4",
+                activeTab.type === "create" && "hidden"
+              )}>
                 <div className="flex items-center gap-3 shrink-0">
                   <CreateTableDialog schema={activeTab.schema} onTableCreated={() => {
                     // Refresh schema explorer would go here
@@ -648,35 +701,48 @@ export default function DatabasePage() {
                 )}
               </div>
 
-              {/* Content - direct data view */}
+              {/* Content - direct data view or create table form */}
               <div className="flex-1 overflow-hidden px-6 pb-6 pt-4">
-                <ResultsViewer
-                  result={activeData?.result || null}
-                  error={activeData?.error || null}
-                  loading={activeData?.loading || false}
-                  schema={activeTab?.schema}
-                  table={activeTab?.table}
-                  columns={activeData?.columns || []}
-                  primaryKeys={
-                    connection?.provider === DatabaseProvider.MONGODB
-                      ? ["_id"]
-                      : activeData?.constraints
-                          ?.filter((c) => c.type === "PRIMARY KEY")
-                          .flatMap((c) => c.columns) || []
-                  }
-                  onRefresh={() => {
-                    if (activeTab) {
-                      loadTableData(activeTab.schema, activeTab.table, activeTab.id);
+                {activeTab.type === "create" ? (
+                  <div className="h-full flex flex-col">
+                    <CreateTableDialog
+                      schema={activeTab.schema}
+                      openInPage
+                      onTableCreated={() => {
+                        triggerRefresh();
+                        closeTab(activeTab.id);
+                      }}
+                    />
+                  </div>
+                ) : (
+                  <ResultsViewer
+                    result={activeData?.result || null}
+                    error={activeData?.error || null}
+                    loading={activeData?.loading || false}
+                    schema={activeTab?.schema}
+                    table={activeTab?.table}
+                    columns={activeData?.columns || []}
+                    primaryKeys={
+                      connection?.provider === DatabaseProvider.MONGODB
+                        ? ["_id"]
+                        : activeData?.constraints
+                            ?.filter((c) => c.type === "PRIMARY KEY")
+                            .flatMap((c) => c.columns) || []
                     }
-                  }}
-                  enableCRUD={!!activeTab}
-                  provider={connection?.provider}
-                  page={activePage}
-                  pageSize={activePageSize}
-                  onPageChange={setActivePage}
-                  onPageSizeChange={(size) => { setActivePageSize(size); setActivePage(1); }}
-                  showPagination={false}
-                />
+                    onRefresh={() => {
+                      if (activeTab) {
+                        loadTableData(activeTab.schema, activeTab.table, activeTab.id);
+                      }
+                    }}
+                    enableCRUD={!!activeTab}
+                    provider={connection?.provider}
+                    page={activePage}
+                    pageSize={activePageSize}
+                    onPageChange={setActivePage}
+                    onPageSizeChange={(size) => { setActivePageSize(size); setActivePage(1); }}
+                    showPagination={false}
+                  />
+                )}
               </div>
             </div>
           ) : (

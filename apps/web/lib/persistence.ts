@@ -44,7 +44,7 @@ export const Persistence = {
   /**
    * Get open table tabs for a connection
    */
-  getTableTabs(connectionId: string): Array<{ id: string; schema: string; table: string; label: string }> {
+  getTableTabs(connectionId: string): Array<{ id: string; schema: string; table: string; label: string; type?: "view" | "create" }> {
     if (typeof window === "undefined") return [];
     try {
       const stored = localStorage.getItem(`${STORAGE_PREFIX}tabs_${connectionId}`);
@@ -58,7 +58,7 @@ export const Persistence = {
   /**
    * Save open table tabs for a connection
    */
-  setTableTabs(connectionId: string, tabs: Array<{ id: string; schema: string; table: string; label: string }>): void {
+  setTableTabs(connectionId: string, tabs: Array<{ id: string; schema: string; table: string; label: string; type?: "view" | "create" }>): void {
     if (typeof window === "undefined") return;
     localStorage.setItem(`${STORAGE_PREFIX}tabs_${connectionId}`, JSON.stringify(tabs));
   },

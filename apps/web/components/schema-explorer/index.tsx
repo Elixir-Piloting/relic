@@ -21,11 +21,14 @@ import { toast } from "sonner";
 import type { Schema, Table } from "./types";
 import { SchemaSelector } from "./SchemaSelector";
 import { TableSearch } from "./TableSearch";
+import { useSchemaRefresh } from "@/components/schema-refresh-context";
 
 interface SchemaExplorerProps {
   connectionId?: string;
   onTableSelect?: (schema: string, table: string) => void;
   onTableCreated?: () => void;
+  onOpenNewTableTab?: (schema: string) => void;
+  refreshKey?: number;
 }
 
 function SchemaExplorerLoadingState() {
@@ -50,7 +53,9 @@ export function SchemaExplorer({
   connectionId,
   onTableSelect,
   onTableCreated,
+  onOpenNewTableTab,
 }: SchemaExplorerProps) {
+  const { refreshKey } = useSchemaRefresh();
   const [schemas, setSchemas] = useState<Schema[]>([]);
   const [loading, setLoading] = useState(false);
   const [isMongoDB, setIsMongoDB] = useState(false);
@@ -97,6 +102,12 @@ export function SchemaExplorer({
       }
     }
   }, [schemas.length]);
+
+  useEffect(() => {
+    if (refreshKey > 0 && selectedSchema) {
+      loadTables(selectedSchema, true).catch(console.error);
+    }
+  }, [refreshKey, selectedSchema]);
 
   const checkConnection = useCallback(async (): Promise<boolean> => {
     try {
@@ -434,13 +445,23 @@ export function SchemaExplorer({
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
-              <CreateTableDialog
-                schema={selectedSchema}
-                onTableCreated={() => {
-                  if (selectedSchema) loadTables(selectedSchema);
-                  onTableCreated?.();
-                }}
-              />
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6"
+                      onClick={() => onOpenNewTableTab?.(selectedSchema || "public")}
+                    >
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Create new table</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             </div>
           </div>
         )}

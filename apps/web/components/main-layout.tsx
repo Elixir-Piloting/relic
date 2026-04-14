@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import { DatabaseProvider, getProviderMetadata } from "@/lib/db/providers";
 import type { ConnectionConfig } from "@/lib/db/types";
 import { Button } from "@/components/ui/button";
+import { SchemaRefreshProvider, useSchemaRefresh } from "@/components/schema-refresh-context";
 import {
   Popover,
   PopoverContent,
@@ -55,6 +56,7 @@ function ProviderIcon({ provider }: { provider: DatabaseProvider }) {
 function MainLayoutContent({ children }: MainLayoutProps) {
   const router = useRouter();
   const pathname = usePathname();
+  const { triggerRefresh } = useSchemaRefresh();
   const [currentConnection, setCurrentConnection] =
     useState<ConnectionConfig | null>(null);
   const { collapsed: sidebarCollapsed } = useSidebar();
@@ -64,6 +66,7 @@ function MainLayoutContent({ children }: MainLayoutProps) {
   const [connectionsRefreshKey, setConnectionsRefreshKey] = useState(0);
   const [connectionDialogOpen, setConnectionDialogOpen] = useState(false);
   const [editingConnection, setEditingConnection] = useState<ConnectionConfig | null>(null);
+  const [schemaRefreshKey, setSchemaRefreshKey] = useState(0);
 
   // Refresh connections list when popover opens
   useEffect(() => {
@@ -181,6 +184,15 @@ function MainLayoutContent({ children }: MainLayoutProps) {
     }
   };
 
+  const handleOpenNewTableTab = (schema: string) => {
+    // Navigate to database view with new table tab
+    if (currentConnection) {
+      startTransition(() => {
+        router.push(`/db/${currentConnection.id}?newTable=${schema}`);
+      });
+    }
+  };
+
   // Load all connections for the popover (refresh when dialog changes)
   const allConnections = connectionsRefreshKey >= 0 ? loadConnections() : [];
 
@@ -275,10 +287,8 @@ function MainLayoutContent({ children }: MainLayoutProps) {
           <SchemaExplorer
             connectionId={currentConnection?.id}
             onTableSelect={handleTableSelect}
-            onTableCreated={() => {
-              // Refresh schema - the SchemaExplorer will handle this internally
-              // No need for full page reload
-            }}
+            onOpenNewTableTab={handleOpenNewTableTab}
+            onTableCreated={triggerRefresh}
           />
         </ScrollArea>
         {/* Settings link */}
@@ -312,7 +322,9 @@ function MainLayoutContent({ children }: MainLayoutProps) {
 export function MainLayout({ children }: MainLayoutProps) {
   return (
     <SidebarProvider>
-      <MainLayoutContent>{children}</MainLayoutContent>
+      <SchemaRefreshProvider>
+        <MainLayoutContent>{children}</MainLayoutContent>
+      </SchemaRefreshProvider>
     </SidebarProvider>
   );
 }
