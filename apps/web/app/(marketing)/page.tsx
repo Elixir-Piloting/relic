@@ -3,18 +3,21 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { useConnections } from "@/lib/query/hooks/use-connections";
+import { useConnections, useDeleteConnection } from "@/lib/query/hooks/use-connections";
 import type { ConnectionConfig } from "@/lib/db/types";
 import { Persistence } from "@/lib/persistence";
 import { getProviderMetadata } from "@/lib/db/providers";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AppLogo } from "@/components/app-logo";
-import { Database, Plus, Search, ArrowRight, Loader2 } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Separator } from "@/components/ui/separator";
+import { Database, Plus, Search, Loader2, Pencil, Copy, Trash2, EllipsisVertical } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 function ProviderIcon({ provider, className }: { provider: string; className?: string }) {
-  const meta = getProviderMetadata(provider as any);
+  const meta = getProviderMetadata(provider as DatabaseProvider);
   
   return (
     <div 
@@ -45,7 +48,11 @@ function ProviderIcon({ provider, className }: { provider: string; className?: s
 export default function HomePage() {
   const router = useRouter();
   const { data: connections = [], isLoading } = useConnections();
+  const deleteConnectionMutation = useDeleteConnection();
   const [searchQuery, setSearchQuery] = useState("");
+  const [openPopoverId, setOpenPopoverId] = useState<string | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [connectionToDelete, setConnectionToDelete] = useState<ConnectionConfig | null>(null);
 
   const filteredConnections = connections.filter((conn) =>
     conn.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -61,6 +68,28 @@ export default function HomePage() {
 
   const handleAddConnection = () => {
     router.push("/add-connection");
+  };
+
+  const handleCopyUrl = (conn: ConnectionConfig) => {
+    const url = conn.connectionString || `${conn.provider}://${conn.user}:${conn.password}@${conn.host}:${conn.port}/${conn.database}`;
+    navigator.clipboard.writeText(url);
+    toast.success("Connection URL copied to clipboard");
+    setOpenPopoverId(null);
+  };
+
+  const handleDeleteClick = (conn: ConnectionConfig) => {
+    setConnectionToDelete(conn);
+    setDeleteDialogOpen(true);
+    setOpenPopoverId(null);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (connectionToDelete) {
+      await deleteConnectionMutation.mutateAsync({ id: connectionToDelete.id });
+      toast.success("Connection deleted");
+      setDeleteDialogOpen(false);
+      setConnectionToDelete(null);
+    }
   };
 
   if (isLoading) {
@@ -80,7 +109,7 @@ export default function HomePage() {
         </div>
       </header>
 
-      <main className="flex-1 overflow-y-auto">
+      <main className="flex-1 overflow-y-auto marketing-buttons marketing-inputs">
         <div className="max-w-xl mx-auto p-6">
           <div className="space-y-8 pt-8">
             <div className="space-y-2">
@@ -126,30 +155,87 @@ export default function HomePage() {
                 )}
               </div>
             ) : (
-              <div className="grid gap-3">
+              <div className="grid gap-3 no-ring">
                 {filteredConnections.map((conn) => (
-                  <button
+                  <div
                     key={conn.id}
-                    onClick={() => handleConnectionSelect(conn)}
-                    className="flex items-center justify-between p-4 rounded-lg border bg-card hover:bg-accent/50 hover:border-accent-foreground/20 transition-colors text-left w-full"
+                    className="flex items-center justify-between p-4 rounded-lg border bg-card hover:bg-accent/50 hover:border-accent-foreground/20 transition-colors"
                   >
-                    <div className="flex items-center gap-4 min-w-0">
+                    <button
+                      onClick={() => handleConnectionSelect(conn)}
+                      className="flex items-center gap-4 min-w-0 flex-1 text-left"
+                    >
                       <ProviderIcon provider={conn.provider} />
                       <div className="min-w-0">
                         <p className="font-medium truncate">{conn.name}</p>
-                        <p className="text-sm text-muted-foreground truncate">
-                          {conn.host}:{conn.port}/{conn.database}
-                        </p>
                       </div>
-                    </div>
-                    <ArrowRight className="h-5 w-5 text-muted-foreground shrink-0 ml-4" />
-                  </button>
+                    </button>
+                    <Popover open={openPopoverId === conn.id} onOpenChange={(open) => setOpenPopoverId(open ? conn.id : null)}>
+                      <PopoverTrigger asChild>
+                        <button className="p-2 rounded-full hover:bg-accent transition-colors">
+                          <EllipsisVertical className="h-4 w-4 text-muted-foreground" />
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-48 p-2" align="end">
+                        <div className="space-y-1">
+                          <button
+                            onClick={() => handleCopyUrl(conn)}
+                            className="flex items-center gap-2 w-full px-2 py-1.5 text-sm text-left rounded-md hover:bg-accent"
+                          >
+                            <Copy className="h-4 w-4" />
+                            Copy URL
+                          </button>
+                          <button
+                            className="flex items-center gap-2 w-full px-2 py-1.5 text-sm text-left rounded-md hover:bg-accent"
+                          >
+                            <Pencil className="h-4 w-4" />
+                            Edit
+                          </button>
+                          <Separator className="my-1" />
+                          <button
+                            onClick={() => handleDeleteClick(conn)}
+                            className="flex items-center gap-2 w-full px-2 py-1.5 text-sm text-left rounded-md hover:bg-accent text-destructive"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                            Delete
+                          </button>
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                  </div>
                 ))}
               </div>
             )}
           </div>
         </div>
       </main>
+
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Connection</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete &quot;{connectionToDelete?.name}&quot;? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleConfirmDelete}
+              disabled={deleteConnectionMutation.isPending}
+            >
+              {deleteConnectionMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                "Delete"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

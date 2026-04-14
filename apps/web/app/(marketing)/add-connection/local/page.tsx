@@ -41,7 +41,7 @@ export default function LocalPostgresPage() {
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 marketing-buttons marketing-inputs">
       <div className="space-y-2">
         <h1 className="text-2xl font-semibold">Local PostgreSQL</h1>
         <p className="text-muted-foreground">

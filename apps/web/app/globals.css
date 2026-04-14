@@ -1,5 +1,70 @@
 @import "tailwindcss";
 
+/* Marketing route group styles */
+.marketing-buttons button,
+.marketing-buttons .button-wrapper button,
+.marketing-buttons [class*="Button"] {
+  border-radius: 9999px !important;
+}
+
+/* Exclude provider grid and connection items from pill shape */
+.no-ring,
+.no-ring button,
+.no-ring [class*="provider-grid"] button {
+  --tw-ring-offset-shadow: 0 0 0 var(--tw-ring-inset) var(--tw-ring-offset-color, transparent) !important;
+  --tw-ring-shadow: 0 0 0 0 transparent !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.no-ring button:focus-visible,
+.no-ring [class*="provider-grid"] button:focus-visible {
+  --tw-ring-offset-shadow: 0 0 0 var(--tw-ring-inset) var(--tw-ring-offset-color, transparent) !important;
+  --tw-ring-shadow: 0 0 0 0 transparent !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* Provider grid icons - fully rounded */
+.marketing-buttons .no-ring button > div:first-child,
+.marketing-buttons .no-ring [class*="provider-grid"] button > div:first-child {
+  border-radius: 9999px !important;
+}
+
+.marketing-inputs input,
+.marketing-inputs input[type="text"],
+.marketing-inputs input[type="email"],
+.marketing-inputs input[type="password"],
+.marketing-inputs input[type="number"],
+.marketing-inputs [class*="Input"] input,
+.marketing-inputs [class*="Input"] {
+  border-radius: 9999px !important;
+  --tw-ring-color: hsl(var(--muted)) !important;
+  --tw-ring-opacity: 0.5 !important;
+}
+
+.marketing-inputs input:focus,
+.marketing-inputs input[type="text"]:focus,
+.marketing-inputs input[type="email"]:focus,
+.marketing-inputs input[type="password"]:focus,
+.marketing-inputs input[type="number"]:focus,
+.marketing-inputs [class*="Input"]:focus-within,
+.marketing-inputs [class*="Input"]:focus {
+  --tw-ring-color: hsl(var(--primary) / 0.3) !important;
+  --tw-ring-offset-color: hsl(var(--background)) !important;
+}
+
+.dark .marketing-inputs input:focus,
+.dark .marketing-inputs input[type="text"]:focus,
+.dark .marketing-inputs input[type="email"]:focus,
+.dark .marketing-inputs input[type="password"]:focus,
+.dark .marketing-inputs input[type="number"]:focus,
+.dark .marketing-inputs [class*="Input"]:focus-within,
+.dark .marketing-inputs [class*="Input"]:focus {
+  --tw-ring-color: hsl(var(--primary) / 0.2) !important;
+  --tw-ring-offset-color: hsl(var(--background)) !important;
+}
+
 @theme {
   --color-background: hsl(var(--background));
   --color-foreground: hsl(var(--foreground));
@@ -28,14 +93,13 @@
 
 @layer base {
   :root {
-    /* Apple-inspired light theme - warm, subtle, easy on eyes */
     --background: 0 0% 98%;
     --foreground: 240 6% 10%;
     --card: 0 0% 100%;
     --card-foreground: 240 6% 10%;
     --popover: 0 0% 100%;
     --popover-foreground: 240 6% 10%;
-    --primary: 211 100% 40%;
+    --primary: 221 100% 50%;
     --primary-foreground: 0 0% 100%;
     --secondary: 240 5% 96%;
     --secondary-foreground: 240 6% 10%;
@@ -47,20 +111,19 @@
     --destructive-foreground: 0 0% 100%;
     --border: 240 5% 88%;
     --input: 240 5% 88%;
-    --ring: 211 100% 40%;
+    --ring: 221 100% 50%;
     --radius: 0.625rem;
   }
 
   .dark {
-    /* Apple-inspired dark theme - deep, rich, not pure black */
     --background: 240 6% 5%;
     --foreground: 0 0% 96%;
     --card: 240 6% 8%;
     --card-foreground: 0 0% 96%;
     --popover: 240 6% 8%;
     --popover-foreground: 0 0% 96%;
-    --primary: 212 100% 55%;
-    --primary-foreground: 0 0% 0%;
+    --primary: 221 100% 50%;
+    --primary-foreground: 0 0% 100%;
     --secondary: 240 4% 16%;
     --secondary-foreground: 0 0% 96%;
     --muted: 240 4% 14%;
@@ -71,11 +134,9 @@
     --destructive-foreground: 0 0% 100%;
     --border: 240 4% 18%;
     --input: 240 4% 18%;
-    --ring: 212 100% 55%;
+    --ring: 221 100% 50%;
   }
 }
-
-
 
 
 @layer base {

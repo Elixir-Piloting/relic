@@ -37,7 +37,7 @@ export default function AddConnectionPage() {
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 marketing-inputs">
       <div className="space-y-2">
         <h1 className="text-2xl font-semibold">Add Connection</h1>
         <p className="text-muted-foreground">
@@ -65,6 +65,19 @@ export default function AddConnectionPage() {
         <Separator className="flex-1" />
       </div>
 
+      <div className="space-y-4">
+        <h2 className="text-lg font-medium">Select a Provider</h2>
+        <div className="no-ring">
+          <ProviderGrid onSelect={handleProviderSelect} />
+        </div>
+      </div>
+
+      <div className="relative flex items-center gap-4">
+        <Separator className="flex-1" />
+        <span className="text-sm text-muted-foreground">or</span>
+        <Separator className="flex-1" />
+      </div>
+
       <Button
         variant="outline"
         className="w-full justify-start gap-3"
@@ -73,17 +86,6 @@ export default function AddConnectionPage() {
         <Server className="h-4 w-4" />
         Continue with local PostgreSQL
       </Button>
-
-      <div className="relative flex items-center gap-4">
-        <Separator className="flex-1" />
-        <span className="text-sm text-muted-foreground">or</span>
-        <Separator className="flex-1" />
-      </div>
-
-      <div className="space-y-4">
-        <h2 className="text-lg font-medium">Select a Provider</h2>
-        <ProviderGrid onSelect={handleProviderSelect} />
-      </div>
     </div>
   );
 }
