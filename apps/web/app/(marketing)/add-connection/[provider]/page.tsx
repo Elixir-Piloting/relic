@@ -556,6 +556,7 @@ function ConnectionFormContent({ provider }: { provider: string }) {
 
       <div className="flex gap-4">
         <Button
+          type="button"
           variant="outline"
           onClick={handleTest}
           disabled={isTesting || !isFormValid}
@@ -565,6 +566,7 @@ function ConnectionFormContent({ provider }: { provider: string }) {
           Test Connection
         </Button>
         <Button
+          type="button"
           onClick={handleSave}
           disabled={isSaving || !isSaveValid}
           className="gap-2"
