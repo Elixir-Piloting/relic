@@ -1,4 +1,3 @@
-import Dexie, { type Table } from "dexie";
 import type { ConnectionConfig } from "@/lib/db/types";
 
 export interface SavedConnection extends ConnectionConfig {
@@ -17,41 +16,41 @@ export interface UiPreference {
   value: string;
 }
 
-class RelicDatabase extends Dexie {
-  connections!: Table<SavedConnection, string>;
-  queryTabs!: Table<QueryTab, string>;
-  uiPreferences!: Table<UiPreference, string>;
-
-  constructor() {
-    super("RelicDB");
-    
-    this.version(1).stores({
-      connections: "id, name, provider, createdAt",
-      queryTabs: "id, label",
-      uiPreferences: "key",
-    });
-  }
-}
-
-export const db = new RelicDatabase();
-
+const STORAGE_KEY = "relic_connections";
+const TABS_KEY = "relic_query_tabs";
+const UI_PREFS_KEY = "relic_ui_prefs";
 const connectionCache = new Map<string, SavedConnection>();
 
 export async function saveConnection(connection: SavedConnection): Promise<void> {
   const now = Date.now();
-  const existing = await db.connections.get(connection.id);
+  const connections = await getAllConnections();
   
-  await db.connections.put({
-    ...connection,
-    createdAt: existing?.createdAt || now,
-    updatedAt: now,
-  });
+  const existingIndex = connections.findIndex(c => c.id === connection.id);
+  let updated: SavedConnection[];
   
+  if (existingIndex >= 0) {
+    updated = [...connections];
+    updated[existingIndex] = {
+      ...connection,
+      createdAt: connections[existingIndex].createdAt || now,
+      updatedAt: now,
+    };
+  } else {
+    updated = [...connections, {
+      ...connection,
+      createdAt: now,
+      updatedAt: now,
+    }];
+  }
+  
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
   connectionCache.set(connection.id, connection);
 }
 
 export async function deleteConnection(id: string): Promise<void> {
-  await db.connections.delete(id);
+  const connections = await getAllConnections();
+  const filtered = connections.filter(c => c.id !== id);
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(filtered));
   connectionCache.delete(id);
 }
 
@@ -59,7 +58,8 @@ export async function getConnection(id: string): Promise<SavedConnection | undef
   const cached = connectionCache.get(id);
   if (cached) return cached;
   
-  const conn = await db.connections.get(id);
+  const connections = await getAllConnections();
+  const conn = connections.find(c => c.id === id);
   if (conn) {
     connectionCache.set(id, conn);
   }
@@ -67,9 +67,15 @@ export async function getConnection(id: string): Promise<SavedConnection | undef
 }
 
 export async function getAllConnections(): Promise<SavedConnection[]> {
-  const connections = await db.connections.toArray();
-  connections.forEach(conn => connectionCache.set(conn.id, conn));
-  return connections;
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    const connections: SavedConnection[] = stored ? JSON.parse(stored) : [];
+    connections.forEach(conn => connectionCache.set(conn.id, conn));
+    return connections;
+  } catch (e) {
+    console.error("Failed to load connections:", e);
+    return [];
+  }
 }
 
 export function preloadConnection(conn: SavedConnection): void {
@@ -77,19 +83,37 @@ export function preloadConnection(conn: SavedConnection): void {
 }
 
 export async function saveQueryTab(connectionId: string, tabs: QueryTab[]): Promise<void> {
-  await db.queryTabs.where("id").startsWith(connectionId).delete();
-  await db.queryTabs.bulkPut(tabs.map(tab => ({ ...tab, id: `${connectionId}_${tab.id}` })));
+  const key = `${TABS_KEY}_${connectionId}`;
+  localStorage.setItem(key, JSON.stringify(tabs));
 }
 
 export async function getQueryTabs(connectionId: string): Promise<QueryTab[]> {
-  return db.queryTabs.where("id").startsWith(connectionId).toArray();
+  const key = `${TABS_KEY}_${connectionId}`;
+  try {
+    const stored = localStorage.getItem(key);
+    return stored ? JSON.parse(stored) : [];
+  } catch {
+    return [];
+  }
 }
 
 export async function setUiPreference(key: string, value: string): Promise<void> {
-  await db.uiPreferences.put({ key, value });
+  try {
+    const stored = localStorage.getItem(UI_PREFS_KEY);
+    const prefs: Record<string, string> = stored ? JSON.parse(stored) : {};
+    prefs[key] = value;
+    localStorage.setItem(UI_PREFS_KEY, JSON.stringify(prefs));
+  } catch (e) {
+    console.error("Failed to set UI preference:", e);
+  }
 }
 
 export async function getUiPreference(key: string): Promise<string | undefined> {
-  const pref = await db.uiPreferences.get(key);
-  return pref?.value;
+  try {
+    const stored = localStorage.getItem(UI_PREFS_KEY);
+    const prefs: Record<string, string> = stored ? JSON.parse(stored) : {};
+    return prefs[key];
+  } catch {
+    return undefined;
+  }
 }

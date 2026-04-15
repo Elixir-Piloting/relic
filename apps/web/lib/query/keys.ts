@@ -7,6 +7,7 @@ export const queryKeys = {
   db: {
     status: (connectionId: string) => ["db", "status", connectionId] as const,
     schema: (connectionId: string) => ["db", "schema", connectionId] as const,
+    database: (connectionId: string) => ["db", "database", connectionId] as const,
     tables: (connectionId: string, schema: string) => ["db", "tables", connectionId, schema] as const,
     tableData: (connectionId: string, schema: string, table: string, page: number, pageSize: number) =>
       ["db", "tableData", connectionId, schema, table, page, pageSize] as const,

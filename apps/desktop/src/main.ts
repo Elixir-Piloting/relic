@@ -1,29 +1,58 @@
 import { app, BrowserWindow, ipcMain, dialog } from "electron";
 import * as path from "path";
 import * as fs from "fs";
+import * as http from "http";
 import { spawn, ChildProcess } from "child_process";
 
+if (process.platform === "linux") {
+  app.commandLine.appendSwitch("no-sandbox");
+  app.commandLine.appendSwitch("disable-setuid-sandbox");
+}
+
 let mainWindow: BrowserWindow | null = null;
-let nextServer: ChildProcess | null = null;
+let nextProcess: ChildProcess | null = null;
 
 const isDev = process.env.NODE_ENV === "development" || !app.isPackaged;
 
-function createWindow() {
-  // Get icon path - try multiple locations for compatibility
+const RESOURCE_PATH = process.resourcesPath || "";
+const NEXT_PATH = path.join(RESOURCE_PATH, "web", ".next", "standalone", "projects", "relic", "apps", "web");
+
+function findAvailablePort(startPort: number): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const server = http.createServer();
+    server.setMaxListeners(20);
+    
+    const cleanup = () => {
+      try { server.close(); } catch {}
+    };
+    
+    server.on("error", (err: NodeJS.ErrnoException) => {
+      cleanup();
+      if (err.code === "EADDRINUSE") {
+        resolve(startPort + 1);
+      } else {
+        reject(err);
+      }
+    });
+    
+    server.listen(startPort, "127.0.0.1", () => {
+      const address = server.address();
+      const port = typeof address === 'object' && address !== null ? address.port : startPort;
+      cleanup();
+      resolve(port);
+    });
+  });
+}
+
+function createWindow(url?: string) {
   let iconPath: string | undefined;
   
-  if (isDev) {
-    // In development, try relative path from dist folder
+  if (app.isPackaged) {
+    iconPath = path.join(RESOURCE_PATH, "applogo.png");
+  } else {
     iconPath = path.join(__dirname, "../../web/public/applogo.png");
-    // Fallback: try from project root if running from source
     if (!fs.existsSync(iconPath)) {
       iconPath = path.join(__dirname, "../../../web/public/applogo.png");
-    }
-  } else {
-    // In production, try resources path first, then fallback to app path
-    iconPath = path.join(process.resourcesPath, "applogo.png");
-    if (!fs.existsSync(iconPath)) {
-      iconPath = path.join(app.getAppPath(), "applogo.png");
     }
   }
 
@@ -33,9 +62,9 @@ function createWindow() {
     minWidth: 1200,
     minHeight: 700,
     backgroundColor: "#0c1018",
-    frame: true, // Use default frame
+    frame: true,
     show: false,
-    icon: iconPath, // Set window icon
+    icon: iconPath,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -45,69 +74,11 @@ function createWindow() {
     },
   });
 
-  // In development, load from Next.js dev server
-  // In production, serve from Next.js standalone build
   if (isDev) {
     mainWindow.loadURL("http://localhost:3000");
     mainWindow.webContents.openDevTools();
-  } else {
-    // Production: serve from Next.js standalone build
-    // The standalone build will be in resourcesPath/web/.next/standalone
-    const nextPath = path.join(process.resourcesPath, "web", ".next", "standalone");
-    const serverPath = path.join(nextPath, "server.js");
-    
-    if (fs.existsSync(serverPath)) {
-      // Start Next.js server in background
-      nextServer = spawn("node", [serverPath], {
-        cwd: nextPath,
-        env: { 
-          ...process.env, 
-          PORT: "3000",
-          HOSTNAME: "127.0.0.1",
-          NODE_ENV: "production"
-        },
-        stdio: "ignore",
-        detached: false,
-      });
-      
-      // Wait for server to start, then load
-      const checkServer = setInterval(() => {
-        const http = require("http");
-        const req = http.get("http://127.0.0.1:3000", (res: any) => {
-          clearInterval(checkServer);
-          if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.loadURL("http://127.0.0.1:3000");
-          }
-        });
-        req.on("error", () => {
-          // Server not ready yet, keep waiting
-        });
-        req.setTimeout(1000);
-      }, 500);
-      
-      // Timeout after 15 seconds
-      setTimeout(() => {
-        clearInterval(checkServer);
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.loadURL("http://127.0.0.1:3000");
-        }
-      }, 15000);
-    } else {
-      // Fallback: show error
-      console.error("Next.js build not found at:", serverPath);
-      const errorHtml = `
-        <html>
-          <head><title>Build Error</title></head>
-          <body style="font-family: system-ui; padding: 40px; text-align: center; background: #0c1018; color: #fff;">
-            <h1>Build Error</h1>
-            <p>Next.js build not found.</p>
-            <p>Please rebuild the app.</p>
-            <p style="font-size: 12px; color: #888; margin-top: 20px;">Path: ${serverPath}</p>
-          </body>
-        </html>
-      `;
-      mainWindow.loadURL(`data:text/html,${encodeURIComponent(errorHtml)}`);
-    }
+  } else if (url) {
+    mainWindow.loadURL(url);
   }
 
   mainWindow.once("ready-to-show", () => {
@@ -118,7 +89,6 @@ function createWindow() {
     mainWindow = null;
   });
 
-  // Emit window state changes for custom title bar
   mainWindow.on("maximize", () => {
     mainWindow?.webContents.send("window-maximized");
   });
@@ -128,28 +98,68 @@ function createWindow() {
   });
 }
 
-// Handle window controls
-ipcMain.handle("window-minimize", () => {
-  mainWindow?.minimize();
-});
-
-ipcMain.handle("window-maximize", () => {
-  if (mainWindow?.isMaximized()) {
-    mainWindow.unmaximize();
-  } else {
-    mainWindow?.maximize();
+async function startServer(): Promise<void> {
+  const serverPath = path.join(NEXT_PATH, "server.js");
+  
+  if (!fs.existsSync(serverPath)) {
+    console.error("Server not found:", serverPath);
+    return;
   }
+
+  try {
+    const port = await findAvailablePort(3000);
+    console.log("Starting Next.js on port:", port);
+    
+    nextProcess = spawn("node", [serverPath], {
+      cwd: NEXT_PATH,
+      env: {
+        ...process.env,
+        NODE_ENV: "production",
+        PORT: String(port),
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    nextProcess.stdout?.on("data", (data: Buffer) => {
+      const text = data.toString();
+      console.log("[Next]", text.trim());
+      
+      if (text.includes("Ready")) {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.loadURL(`http://localhost:${port}`);
+        }
+      }
+    });
+
+    nextProcess.stderr?.on("data", (data: Buffer) => {
+      console.error("[Next Error]", data.toString().trim());
+    });
+
+    nextProcess.on("error", (err) => {
+      console.error("Process error:", err);
+    });
+    
+  } catch (err) {
+    console.error("Failed to start Next.js:", err);
+    createWindow();
+  }
+}
+
+function stopServer() {
+  if (nextProcess) {
+    nextProcess.kill();
+    nextProcess = null;
+  }
+}
+
+ipcMain.handle("window-minimize", () => mainWindow?.minimize());
+ipcMain.handle("window-maximize", () => {
+  if (mainWindow?.isMaximized()) mainWindow.unmaximize();
+  else mainWindow?.maximize();
 });
+ipcMain.handle("window-close", () => mainWindow?.close());
+ipcMain.handle("window-is-maximized", () => mainWindow?.isMaximized() ?? false);
 
-ipcMain.handle("window-close", () => {
-  mainWindow?.close();
-});
-
-  ipcMain.handle("window-is-maximized", () => {
-    return mainWindow?.isMaximized() ?? false;
-  });
-
-// Handle file save
 ipcMain.handle("save-file", async (_event, data: string, defaultFilename: string) => {
   if (!mainWindow) return { canceled: true };
 
@@ -161,60 +171,40 @@ ipcMain.handle("save-file", async (_event, data: string, defaultFilename: string
     ],
   });
 
-  if (result.canceled || !result.filePath) {
-    return { canceled: true };
-  }
+  if (result.canceled || !result.filePath) return { canceled: true };
 
   try {
-    // Convert base64 data URL to buffer
     const base64Data = data.replace(/^data:image\/png;base64,/, "");
     const buffer = Buffer.from(base64Data, "base64");
     fs.writeFileSync(result.filePath, buffer);
     return { canceled: false, filePath: result.filePath };
   } catch (error) {
-    console.error("Error saving file:", error);
     return { canceled: true, error: error instanceof Error ? error.message : "Unknown error" };
   }
 });
 
-app.commandLine.appendSwitch("no-sandbox");
-app.commandLine.appendSwitch("disable-setuid-sandbox");
+app.whenReady().then(async () => {
+  if (app.isPackaged) {
+    createWindow();
+    await startServer();
+  } else {
+    createWindow();
+  }
+});
 
-app.whenReady().then(() => {
-  // No native menu bar - using custom title bar instead
-  createWindow();
-
-  app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
-    }
-  });
+app.on("activate", () => {
+  if (BrowserWindow.getAllWindows().length === 0) {
+    createWindow();
+  }
 });
 
 app.on("window-all-closed", () => {
-  // Kill Next.js server if running
-  if (nextServer) {
-    try {
-      nextServer.kill();
-      nextServer = null;
-    } catch (e) {
-      // Ignore errors
-    }
-  }
-  
+  stopServer();
   if (process.platform !== "darwin") {
     app.quit();
   }
 });
 
 app.on("before-quit", () => {
-  // Kill Next.js server before quitting
-  if (nextServer) {
-    try {
-      nextServer.kill();
-      nextServer = null;
-    } catch (e) {
-      // Ignore errors
-    }
-  }
+  stopServer();
 });

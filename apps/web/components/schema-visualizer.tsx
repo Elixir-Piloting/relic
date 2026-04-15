@@ -288,7 +288,7 @@ export function SchemaVisualizer({
 
       // Load relationships for tables in the selected schema
       const allRelationships: RelationshipEdge[] = [];
-      const relationshipPromises = flatTables.map(async (table) => {
+      const relationshipPromises = flatTables.map(async (table: TableNode) => {
         try {
           const [outgoingRes, incomingRes] = await Promise.all([
             fetch(

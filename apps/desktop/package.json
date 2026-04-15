@@ -3,14 +3,18 @@
   "version": "0.1.0",
   "private": true,
   "main": "dist/main.js",
-  "author": "Relic",
+  "author": {
+    "name": "Relic Team",
+    "email": "contact@relic.dev"
+  },
+  "homepage": "https://github.com/relic/database-admin",
   "description": "Relic Database Admin - Desktop App",
   "scripts": {
     "dev": "pnpm run compile && concurrently \"pnpm run dev:next\" \"wait-on http://localhost:3000 && electron . --no-sandbox\"",
     "dev:next": "pnpm --filter @relic/web dev",
     "build": "pnpm run build:next && pnpm run build:electron",
     "build:next": "pnpm --filter @relic/web build:electron",
-    "build:electron": "pnpm run compile && electron-builder",
+    "build:electron": "pnpm run compile && electron-builder --config electron-builder.config.js",
     "start": "pnpm run compile && electron .",
     "lint": "eslint",
     "compile": "tsc"

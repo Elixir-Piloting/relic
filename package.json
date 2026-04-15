@@ -3,7 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "pnpm": {
-    "onlyBuiltDependencies": ["electron"]
+    "onlyBuiltDependencies": [
+      "electron"
+    ]
   },
   "scripts": {
     "dev:web": "pnpm --filter @relic/web dev",
@@ -17,6 +19,7 @@
   },
   "devDependencies": {
     "@types/node": "^20",
+    "prebuild-install": "^7.1.3",
     "typescript": "^5"
   }
 }

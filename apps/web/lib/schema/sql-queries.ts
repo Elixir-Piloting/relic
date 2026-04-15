@@ -224,6 +224,148 @@ ORDER BY tc.constraint_name, kcu.ordinal_position`,
       params: ["schema", "table"],
     },
   },
+  [DatabaseProvider.MARIADB]: {
+    getSchemas: {
+      sql: `SELECT schema_name FROM information_schema.schemata WHERE schema_name NOT IN ('mysql', 'information_schema', 'performance_schema', 'sys') ORDER BY schema_name`,
+    },
+    getTables: {
+      sql: `SELECT table_schema, table_name FROM information_schema.tables WHERE table_schema = ? AND table_type = 'BASE TABLE' ORDER BY table_name`,
+      params: ["schema"],
+    },
+    getColumns: {
+      sql: `SELECT column_name, data_type, is_nullable, column_default, character_maximum_length FROM information_schema.columns WHERE table_schema = ? AND table_name = ? ORDER BY ordinal_position`,
+      params: ["schema", "table"],
+    },
+    getIndexes: {
+      sql: `SELECT index_name, non_unique, column_name, seq_in_index FROM information_schema.statistics WHERE table_schema = ? AND table_name = ? ORDER BY index_name, seq_in_index`,
+      params: ["schema", "table"],
+    },
+    getConstraints: {
+      sql: `SELECT tc.constraint_name, tc.constraint_type, kcu.column_name FROM information_schema.table_constraints tc JOIN information_schema.key_column_usage kcu ON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema WHERE tc.table_schema = ? AND tc.table_name = ? ORDER BY tc.constraint_name, kcu.ordinal_position`,
+      params: ["schema", "table"],
+    },
+  },
+  [DatabaseProvider.SQLSERVER]: {
+    getSchemas: {
+      sql: `SELECT name AS schema_name FROM sys.schemas WHERE name NOT IN ('sys', 'INFORMATION_SCHEMA', 'guest') ORDER BY name`,
+    },
+    getTables: {
+      sql: `SELECT s.name AS table_schema, t.name AS table_name FROM sys.tables t JOIN sys.schemas s ON t.schema_id = s.schema_id WHERE s.name = ? ORDER BY t.name`,
+      params: ["schema"],
+    },
+    getColumns: {
+      sql: `SELECT c.name AS column_name, ty.name AS data_type, c.is_nullable, dc.definition AS column_default, NULL AS character_maximum_length FROM sys.columns c JOIN sys.tables t ON c.object_id = t.object_id JOIN sys.schemas s ON t.schema_id = s.schema_id JOIN sys.types ty ON c.user_type_id = ty.user_type_id LEFT JOIN sys.default_constraints dc ON c.default_object_id = dc.object_id WHERE s.name = ? AND t.name = ? ORDER BY c.column_id`,
+      params: ["schema", "table"],
+    },
+    getIndexes: {
+      sql: `SELECT i.name AS indexname, i.is_unique, c.name AS column_name, ic.key_ordinal FROM sys.indexes i JOIN sys.index_columns ic ON i.object_id = ic.object_id AND i.index_id = ic.index_id JOIN sys.columns c ON ic.object_id = c.object_id AND ic.column_id = c.column_id JOIN sys.tables t ON i.object_id = t.object_id JOIN sys.schemas s ON t.schema_id = s.schema_id WHERE s.name = ? AND t.name = ? ORDER BY i.name, ic.key_ordinal`,
+      params: ["schema", "table"],
+    },
+    getConstraints: {
+      sql: `SELECT tc.name AS constraint_name, tc.type_desc AS constraint_type, kcu.name AS column_name FROM sys.key_constraints tc JOIN sys.key_column_usage kcu ON tc.object_id = kcu.constraint_object_id JOIN sys.columns c ON kcu.parent_object_id = c.object_id AND kcu.parent_column_id = c.column_id JOIN sys.tables t ON tc.parent_object_id = t.object_id JOIN sys.schemas s ON t.schema_id = s.schema_id WHERE s.name = ? AND t.name = ? ORDER BY tc.name`,
+      params: ["schema", "table"],
+    },
+  },
+  [DatabaseProvider.CLICKHOUSE]: {
+    getSchemas: {
+      sql: `SELECT database AS schema_name FROM system.databases ORDER BY database`,
+    },
+    getTables: {
+      sql: `SELECT database AS table_schema, name AS table_name FROM system.tables WHERE database = ? ORDER BY name`,
+      params: ["schema"],
+    },
+    getColumns: {
+      sql: `SELECT name AS column_name, type AS data_type, default_kind AS column_default FROM system.columns WHERE database = ? AND table = ? ORDER BY position`,
+      params: ["schema", "table"],
+    },
+    getIndexes: {
+      sql: `SELECT name AS indexname, data_compressed_bytes AS indexdef FROM system.parts WHERE database = ? AND table = ? ORDER BY name`,
+      params: ["schema", "table"],
+    },
+    getConstraints: {
+      sql: `SELECT constraint_name, expression AS constraint_type, NULL AS column_name FROM system.table_constraints WHERE database = ? AND table = ?`,
+      params: ["schema", "table"],
+    },
+  },
+  [DatabaseProvider.REDIS]: {
+    getSchemas: {
+      sql: `/* Redis - no schema concept */`,
+    },
+    getTables: {
+      sql: `/* Redis uses key patterns, not tables */`,
+    },
+    getColumns: {
+      sql: `/* Redis uses key patterns, not tables */`,
+    },
+    getIndexes: {
+      sql: `/* Redis uses key patterns, not indexes */`,
+    },
+    getConstraints: {
+      sql: `/* Redis uses key patterns, not constraints */`,
+    },
+  },
+  [DatabaseProvider.VALTOWN]: {
+    getSchemas: {
+      sql: `SELECT schema_name FROM information_schema.schemata WHERE schema_name NOT IN ('pg_catalog', 'information_schema') ORDER BY schema_name`,
+    },
+    getTables: {
+      sql: `SELECT table_schema, table_name FROM information_schema.tables WHERE table_schema = ? AND table_type = 'BASE TABLE' ORDER BY table_name`,
+      params: ["schema"],
+    },
+    getColumns: {
+      sql: `SELECT column_name, data_type, is_nullable, column_default, character_maximum_length FROM information_schema.columns WHERE table_schema = ? AND table_name = ? ORDER BY ordinal_position`,
+      params: ["schema", "table"],
+    },
+    getIndexes: {
+      sql: `SELECT indexname, indexdef FROM pg_indexes WHERE schemaname = ? AND tablename = ? ORDER BY indexname`,
+      params: ["schema", "table"],
+    },
+    getConstraints: {
+      sql: `SELECT tc.constraint_name, tc.constraint_type, kcu.column_name FROM information_schema.table_constraints tc JOIN information_schema.key_column_usage kcu ON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema WHERE tc.table_schema = ? AND tc.table_name = ? ORDER BY tc.constraint_name, kcu.ordinal_position`,
+      params: ["schema", "table"],
+    },
+  },
+  [DatabaseProvider.CLOUDFLARED1]: {
+    getSchemas: {
+      sql: `/* Cloudflare D1 uses SQLite - 'main' is the only schema */`,
+    },
+    getTables: {
+      sql: `SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name`,
+    },
+    getColumns: {
+      sql: `PRAGMA table_info("[[TABLE_NAME]]")`,
+      params: ["table"],
+    },
+    getIndexes: {
+      sql: `PRAGMA index_list("[[TABLE_NAME]]")`,
+      params: ["table"],
+    },
+    getConstraints: {
+      sql: `PRAGMA foreign_key_list("[[TABLE_NAME]]")`,
+      params: ["table"],
+    },
+  },
+  [DatabaseProvider.NEON]: {
+    getSchemas: {
+      sql: `SELECT schema_name FROM information_schema.schemata WHERE schema_name NOT IN ('pg_catalog', 'information_schema', 'pg_toast') ORDER BY CASE WHEN schema_name = 'public' THEN 0 ELSE 1 END, schema_name`,
+    },
+    getTables: {
+      sql: `SELECT table_schema, table_name FROM information_schema.tables WHERE table_schema = ? AND table_type = 'BASE TABLE' ORDER BY table_name`,
+      params: ["schema"],
+    },
+    getColumns: {
+      sql: `SELECT column_name, data_type, is_nullable, column_default, character_maximum_length FROM information_schema.columns WHERE table_schema = ? AND table_name = ? ORDER BY ordinal_position`,
+      params: ["schema", "table"],
+    },
+    getIndexes: {
+      sql: `SELECT indexname, indexdef FROM pg_indexes WHERE schemaname = ? AND tablename = ? ORDER BY indexname`,
+      params: ["schema", "table"],
+    },
+    getConstraints: {
+      sql: `SELECT tc.constraint_name, tc.constraint_type, kcu.column_name FROM information_schema.table_constraints tc JOIN information_schema.key_column_usage kcu ON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema WHERE tc.table_schema = ? AND tc.table_name = ? ORDER BY tc.constraint_name, kcu.ordinal_position`,
+      params: ["schema", "table"],
+    },
+  },
 };
 
 export function getProviderSqlQueries(provider: DatabaseProvider): SqlQueries {

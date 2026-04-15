@@ -2,13 +2,13 @@ module.exports = {
   appId: "com.relic.database-admin",
   productName: "Relic",
   electronVersion: "30.5.1",
+  copyright: "Copyright © 2024 Relic Team",
   directories: {
     output: "release",
   },
   files: [
     "dist/**/*",
     "package.json",
-    "../web/public/applogo.png",
   ],
   extraResources: [
     {
@@ -18,7 +18,12 @@ module.exports = {
     },
     {
       from: "../web/.next/static",
-      to: "web/.next/static",
+      to: "web/.next/standalone/projects/relic/apps/web/.next/static",
+      filter: ["**/*"],
+    },
+    {
+      from: "../web/public",
+      to: "web/.next/standalone/projects/relic/apps/web/public",
       filter: ["**/*"],
     },
     {
@@ -26,22 +31,25 @@ module.exports = {
       to: "applogo.png",
     },
   ],
-  mac: {
-    category: "public.app-category.developer-tools",
-    target: ["dmg", "zip"],
-    icon: "../web/public/applogo.png",
-  },
-  win: {
-    target: ["nsis", "portable"],
-    icon: "../web/public/applogo.png",
-  },
   linux: {
-    target: ["AppImage", "deb"],
+    target: [
+      {
+        target: "AppImage",
+        arch: ["x64"],
+      },
+      {
+        target: "deb",
+        arch: ["x64"],
+      },
+    ],
     category: "Development",
     icon: "../web/public/applogo.png",
+    executableName: "relic",
+    artifactName: "${productName}-${version}-${arch}.${ext}",
   },
-  nsis: {
-    oneClick: false,
-    allowToChangeInstallationDirectory: true,
+  deb: {
+    maintainer: "Relic Team <contact@relic.dev>",
+    packageName: "relic",
+    icon: "../web/public/applogo.png",
   },
 };
