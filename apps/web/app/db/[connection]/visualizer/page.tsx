@@ -13,7 +13,7 @@ export default function VisualizerPage() {
   const params = useParams();
   const connectionId = params.connection as string;
   const [connection, setConnection] = useState<ConnectionConfig | null>(null);
-  const [isConnected, setIsConnected] = useState(false);
+  const [isReady, setIsReady] = useState(false);
   const initializedRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -39,11 +39,11 @@ export default function VisualizerPage() {
         });
 
         // Wait a bit for connection to settle
-        await new Promise(resolve => setTimeout(resolve, 200));
-        setIsConnected(true);
+        await new Promise(resolve => setTimeout(resolve, 300));
+        setIsReady(true);
       } catch (error) {
         console.error("Failed to connect:", error);
-        setIsConnected(true); // Let SchemaVisualizer handle retry
+        setIsReady(true); // Let SchemaVisualizer handle retry
       }
     });
   }, [connectionId]);
@@ -70,7 +70,14 @@ export default function VisualizerPage() {
       <div className="flex flex-col h-full">
         <DatabaseNavbar connectionId={connection.id} />
         <div className="flex-1">
-          <SchemaVisualizer connectionId={connection.id} />
+          {/* Only render SchemaVisualizer once connection is ready */}
+          {isReady ? (
+            <SchemaVisualizer connectionId={connection.id} />
+          ) : (
+            <div className="flex items-center justify-center h-full text-muted-foreground">
+              Connecting...
+            </div>
+          )}
         </div>
       </div>
     </MainLayout>

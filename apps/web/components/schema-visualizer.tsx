@@ -97,39 +97,8 @@ export function SchemaVisualizer({
   const loadAllSchemas = useCallback(async (schemaToLoad?: string | null) => {
     setIsLoading(true);
     try {
-      // First check connection status and reconnect if needed, waiting for connection
-      let isConnected = false;
-      const maxRetries = 3;
-      const retryDelay = 500;
-
-      for (let retry = 0; retry < maxRetries; retry++) {
-        try {
-          const statusRes = await fetch("/api/db/status");
-          const statusData = await statusRes.json();
-          isConnected = statusData.connected;
-
-          if (!isConnected && connectionId) {
-            const { getConnection } = await import("@/lib/connections/store");
-            const conn = getConnection(connectionId);
-            if (conn) {
-              await fetch("/api/db/connect", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(conn),
-              });
-              // Wait for connection to establish
-              await new Promise((resolve) => setTimeout(resolve, retryDelay));
-              continue; // Check connection status again
-            }
-          }
-          break; // Connected or no connectionId, exit retry loop
-        } catch (statusError) {
-          console.error("Failed to check connection status:", statusError);
-          if (retry < maxRetries - 1) {
-            await new Promise((resolve) => setTimeout(resolve, retryDelay));
-          }
-        }
-      }
+      // Wait a moment for connection to be ready
+      await new Promise(resolve => setTimeout(resolve, 200));
       
       // Load all schemas
       const schemasRes = await fetch("/api/db/schema");
@@ -169,23 +138,13 @@ export function SchemaVisualizer({
       
       setAvailableSchemas(sortedSchemas);
 
-      // Auto-retry if no schemas found (connection might not be ready yet)
+      // If no schemas found, show empty state but don't recurse infinitely
       if (sortedSchemas.length === 0) {
-        const retryCount = (loadAllSchemas as any)._retryCount || 0;
-        if (retryCount < 3) {
-          (loadAllSchemas as any)._retryCount = retryCount + 1;
-          console.log(`[SchemaVisualizer] No schemas found, retrying... (${retryCount + 1}/3)`);
-          await new Promise(resolve => setTimeout(resolve, 500));
-          return loadAllSchemas(schemaToLoad);
-        }
-        (loadAllSchemas as any)._retryCount = 0;
         setTables([]);
         setRelationships([]);
         setIsLoading(false);
         return;
       }
-      // Reset retry count on successful load
-      (loadAllSchemas as any)._retryCount = 0;
 
       // Determine which schema to load - use parameter first, then currentSchema, then first available
       let selectedSchema = schemaToLoad || currentSchema;
