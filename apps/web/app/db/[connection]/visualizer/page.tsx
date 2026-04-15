@@ -32,17 +32,20 @@ export default function VisualizerPage() {
 
       // Connect and wait for connection to be established
       try {
-        await fetch("/api/db/connect", {
+        console.log("[VisualizerPage] Connecting to:", conn.name);
+        const response = await fetch("/api/db/connect", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(conn),
         });
+        console.log("[VisualizerPage] Connect response:", response.status);
 
         // Wait a bit for connection to settle
         await new Promise(resolve => setTimeout(resolve, 300));
+        console.log("[VisualizerPage] Setting isReady to true");
         setIsReady(true);
       } catch (error) {
-        console.error("Failed to connect:", error);
+        console.error("[VisualizerPage] Failed to connect:", error);
         setIsReady(true); // Let SchemaVisualizer handle retry
       }
     });
