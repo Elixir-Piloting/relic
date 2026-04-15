@@ -49,22 +49,6 @@ function ConnectionFormContent({ provider }: { provider: string }) {
   const [isSaving, setIsSaving] = useState(false);
   const [urlParseError, setUrlParseError] = useState<string | null>(null);
 
-  const isFormValid = (() => {
-    if (meta.connectionType === "file") {
-      return !!formData.filePath?.trim();
-    } else if (meta.connectionType === "url") {
-      return !!formData.connectionString?.trim();
-    } else if (meta.connectionType === "fields-or-url") {
-      const hasUrl = !!formData.connectionString?.trim();
-      const hasFields = !!formData.host?.trim() && !!formData.database?.trim() && !!formData.user?.trim();
-      return hasUrl || hasFields;
-    } else {
-      return !!formData.host?.trim() && !!formData.database?.trim() && !!formData.user?.trim();
-    }
-  })();
-
-  const isSaveValid = isFormValid && !!formData.name?.trim();
-
   useEffect(() => {
     const providerEnum = provider as DatabaseProvider;
     const meta = getProviderMetadata(providerEnum);
@@ -100,6 +84,22 @@ function ConnectionFormContent({ provider }: { provider: string }) {
   }, [provider, searchParams]);
 
   const meta = getProviderMetadata(formData.provider);
+
+  const isFormValid = (() => {
+    if (meta.connectionType === "file") {
+      return !!formData.filePath?.trim();
+    } else if (meta.connectionType === "url") {
+      return !!formData.connectionString?.trim();
+    } else if (meta.connectionType === "fields-or-url") {
+      const hasUrl = !!formData.connectionString?.trim();
+      const hasFields = !!formData.host?.trim() && !!formData.database?.trim() && !!formData.user?.trim();
+      return hasUrl || hasFields;
+    } else {
+      return !!formData.host?.trim() && !!formData.database?.trim() && !!formData.user?.trim();
+    }
+  })();
+
+  const isSaveValid = isFormValid && !!formData.name?.trim();
 
   const updateFormField = (field: string, value: unknown) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
