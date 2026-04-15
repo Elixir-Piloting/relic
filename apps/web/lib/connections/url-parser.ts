@@ -1,14 +1,158 @@
 /**
+ * Base postgres parsing helper used by keyword detection
+ */
+function basePostgres(url: string): ParsedConnectionURL {
+  const lower = url.toLowerCase();
+  const isMongoDB = lower.startsWith("mongodb://") || lower.startsWith("mongodb+srv://");
+  const isMySQL = lower.startsWith("mysql://");
+  const isPostgreSQL = lower.startsWith("postgresql://") || lower.startsWith("postgres://");
+  const isSQLite = lower.startsWith("sqlite://");
+  const isLibSQL = lower.startsWith("libsql://");
+  const isRedis = lower.startsWith("redis://");
+  const isClickHouse = lower.startsWith("clickhouse://");
+  
+  // MongoDB SRV format
+  if (isMongoDB && lower.startsWith("mongodb+srv://")) {
+    return parseMongoDBSRV(url);
+  }
+  
+  const atCount = (lower.match(/@/g) || []).length;
+  const hasUnencodedAt = atCount > 1;
+  
+  if (!hasUnencodedAt) {
+    try {
+      let tempUrl = url;
+      if (isPostgreSQL) {
+        tempUrl = url.replace(/^(postgresql|postgres):\/\//, "http://");
+      } else if (isMySQL) {
+        tempUrl = url.replace(/^mysql:\/\//, "http://");
+      } else if (isMongoDB) {
+        tempUrl = url.replace(/^mongodb:\/\//, "http://");
+      } else if (isLibSQL) {
+        tempUrl = url.replace(/^libsql:\/\//, "http://");
+      } else if (isRedis) {
+        tempUrl = url.replace(/^redis:\/\//, "http://");
+      } else if (isClickHouse) {
+        tempUrl = url.replace(/^clickhouse:\/\//, "http://");
+      }
+      
+      const parsedUrl = new URL(tempUrl);
+      const host = parsedUrl.hostname;
+      const portStr = parsedUrl.port;
+      const pathname = parsedUrl.pathname;
+      const searchParams = parsedUrl.searchParams;
+      
+      const user = parsedUrl.username ? decodeURIComponent(parsedUrl.username) : "";
+      const password = parsedUrl.password ? decodeURIComponent(parsedUrl.password) : "";
+      const database = pathname.replace(/^\//, "").split("?")[0];
+      
+      const sslMode = searchParams.get("sslmode") || searchParams.get("ssl_mode");
+      const ssl = sslMode === "require" || sslMode === "prefer" || searchParams.get("ssl") === "true" || isMongoDB;
+      
+      let defaultPort = 5432;
+      if (isMySQL) defaultPort = 3306;
+      else if (isMongoDB) defaultPort = 27017;
+      else if (isRedis) defaultPort = 6379;
+      else if (isClickHouse) defaultPort = 9000;
+      
+      const port = portStr ? parseInt(portStr, 10) : defaultPort;
+      
+      if (!host) throw new Error("Missing host");
+      
+      return {
+        provider: DatabaseProvider.POSTGRESQL,
+        host: decodeURIComponent(host),
+        port,
+        database: database ? decodeURIComponent(database) : "",
+        user,
+        password,
+        ssl,
+        isSupabase: false,
+        isSessionPooler: false,
+      };
+    } catch {
+      // Fall through
+    }
+  }
+  
+  // Manual parsing fallback
+  const protocolMatch = url.match(/^(postgresql|postgres|mysql|mongodb|libsql|redis|clickhouse):\/\//);
+  if (!protocolMatch) {
+    throw new Error("Invalid connection URL format");
+  }
+  
+  const protocol = protocolMatch[1];
+  const afterProtocol = url.substring(protocolMatch[0].length);
+  
+  const dbSlashIndex = afterProtocol.indexOf('/');
+  let beforeDb: string;
+  let afterDb: string;
+  let database = "";
+  let queryString = "";
+  
+  if (dbSlashIndex === -1) {
+    beforeDb = afterProtocol;
+    afterDb = "";
+  } else {
+    beforeDb = afterProtocol.substring(0, dbSlashIndex);
+    afterDb = afterProtocol.substring(dbSlashIndex + 1);
+    [database, queryString = ""] = afterDb.split('?');
+  }
+  
+  const lastAt = beforeDb.lastIndexOf('@');
+  let user = "";
+  let password = "";
+  let hostPort = beforeDb;
+  
+  if (lastAt !== -1) {
+    const credentials = beforeDb.substring(0, lastAt);
+    hostPort = beforeDb.substring(lastAt + 1);
+    
+    const colonIndex = credentials.indexOf(':');
+    if (colonIndex !== -1) {
+      user = credentials.substring(0, colonIndex);
+      password = credentials.substring(colonIndex + 1);
+    } else {
+      user = credentials;
+    }
+  }
+  
+  const [host, portStr = ""] = hostPort.split(':');
+  
+  let defaultPort = 5432;
+  if (protocol === "mysql") defaultPort = 3306;
+  else if (protocol === "mongodb") defaultPort = 27017;
+  else if (protocol === "redis") defaultPort = 6379;
+  else if (protocol === "clickhouse") defaultPort = 9000;
+  
+  const port = portStr ? parseInt(portStr, 10) : defaultPort;
+  
+  const decodedUser = user ? decodeURIComponent(user) : "";
+  const decodedPassword = password ? decodeURIComponent(password) : "";
+  const decodedHost = host ? decodeURIComponent(host) : "";
+  const decodedDatabase = database ? decodeURIComponent(database) : "";
+  
+  const params = new URLSearchParams(queryString);
+  const sslMode = params.get("sslmode") || params.get("ssl_mode");
+  const ssl = sslMode === "require" || sslMode === "prefer" || params.get("ssl") === "true" || protocol === "mongodb";
+  
+  if (!decodedHost) throw new Error("Missing host");
+  
+  return {
+    provider: DatabaseProvider.POSTGRESQL,
+    host: decodedHost,
+    port,
+    database: decodedDatabase,
+    user: decodedUser,
+    password: decodedPassword,
+    ssl,
+    isSupabase: false,
+    isSessionPooler: false,
+  };
+}
+
+/**
  * Parse database connection URL into connection config
- * Supports formats:
- * - PostgreSQL: postgresql://user:password@host:port/database
- * - MySQL: mysql://user:password@host:port/database
- * - MongoDB: mongodb://user:password@host:port/database
- * - MongoDB Atlas: mongodb+srv://user:password@host/database
- * - SQLite: sqlite:///path/to/database.db
- * - LibSQL/Turso: libsql://host/database
- * - Redis: redis://user:password@host:port
- * - ClickHouse: clickhouse://user:password@host:port/database
  */
 
 import { DatabaseProvider, detectProviderFromConnectionString } from "@/lib/db/providers";
@@ -28,6 +172,34 @@ export interface ParsedConnectionURL {
 export function parseConnectionURL(url: string): ParsedConnectionURL {
   // Remove any whitespace
   url = url.trim();
+
+  // Check provider by keywords first (more accurate than protocol)
+  const lower = url.toLowerCase();
+  
+  // Neon
+  if (lower.includes("neon.tech") || lower.includes("neondb")) {
+    return { ...basePostgres(url), provider: DatabaseProvider.NEON };
+  }
+  // Supabase
+  if (lower.includes("supabase.co") || lower.includes("pooler.supabase")) {
+    return { ...basePostgres(url), provider: DatabaseProvider.SUPABASE, isSupabase: true, isSessionPooler: true };
+  }
+  // PlanetScale
+  if (lower.includes("planetscale")) {
+    return { ...basePostgres(url), provider: DatabaseProvider.PLANETSCALE };
+  }
+  // Cloudflare D1
+  if (lower.includes("cloudflare") || lower.includes(".d1.")) {
+    return { ...basePostgres(url), provider: DatabaseProvider.CLOUDFLARED1 };
+  }
+  // Val Town
+  if (lower.includes("val.town") || lower.includes("valtown")) {
+    return { ...basePostgres(url), provider: DatabaseProvider.VALTOWN };
+  }
+  // LibSQL/Turso
+  if (lower.includes("turso") || lower.includes("libsql")) {
+    return { ...basePostgres(url), provider: DatabaseProvider.LIBSQL };
+  }
 
   // Check if it's a Supabase connection string
   const isSupabase = url.includes("supabase") || url.includes("pooler.supabase");
