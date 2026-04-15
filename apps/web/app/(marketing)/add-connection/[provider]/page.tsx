@@ -168,28 +168,55 @@ function ConnectionFormContent({ provider }: { provider: string }) {
   };
 
   const handleSave = async () => {
-    if (!formData.name) {
+    // Validate connection name
+    if (!formData.name?.trim()) {
       toast.error("Please provide a connection name");
       return;
     }
 
     if (meta.connectionType === "file") {
-      if (!formData.filePath) {
+      // File-based (SQLite)
+      if (!formData.filePath?.trim()) {
         toast.error("Please provide a file path");
         return;
       }
-    } else {
-      if (!formData.connectionString) {
-        toast.error("Please provide a connection URL");
+    } else if (meta.connectionType === "url" || meta.connectionType === "fields-or-url") {
+      // URL-based or fields-or-url: require connectionString OR host+database+user
+      const hasConnectionString = formData.connectionString?.trim();
+      const hasFields = formData.host?.trim() && formData.database?.trim() && formData.user?.trim();
+      
+      if (!hasConnectionString && !hasFields) {
+        if (meta.connectionType === "url") {
+          toast.error("Please provide a connection string");
+        } else {
+          toast.error("Please provide a connection string OR host, database, and user");
+        }
         return;
       }
 
-      try {
-        parseConnectionURL(formData.connectionString);
-      } catch (error) {
-        toast.error("Invalid connection URL", {
-          description: error instanceof Error ? error.message : "Unknown error",
-        });
+      // Validate connection string if provided
+      if (hasConnectionString) {
+        try {
+          parseConnectionURL(formData.connectionString);
+        } catch (error) {
+          toast.error("Invalid connection URL", {
+            description: error instanceof Error ? error.message : "Unknown error",
+          });
+          return;
+        }
+      }
+    } else {
+      // Fields-based: require host, database, user
+      if (!formData.host?.trim()) {
+        toast.error("Please provide a host");
+        return;
+      }
+      if (!formData.database?.trim()) {
+        toast.error("Please provide a database");
+        return;
+      }
+      if (!formData.user?.trim()) {
+        toast.error("Please provide a user");
         return;
       }
     }
