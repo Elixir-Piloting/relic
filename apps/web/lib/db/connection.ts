@@ -92,18 +92,35 @@ case DatabaseProvider.SQLITE:
       adapter = new SQLiteAdapter(config);
       break;
       
+    case DatabaseProvider.NEON:
+    case DatabaseProvider.SUPABASE:
+    case DatabaseProvider.PLANETSCALE:
+    case DatabaseProvider.CLOUDFLARED1:
+    case DatabaseProvider.VALTOWN:
+      // All use PostgreSQL protocol - treat as PostgreSQL
+      console.log("[Connection] Creating PostgreSQL adapter for", getProviderMetadata(config.provider).name, "...");
+      adapter = new PostgreSQLAdapter(config);
+      break;
+      
     case DatabaseProvider.MARIADB:
+      console.log("[Connection] Creating MySQL adapter for MariaDB...");
+      adapter = new MySQLAdapter(config);
+      break;
+      
+    case DatabaseProvider.MONGODB:
+      console.log("[Connection] Creating MongoDB adapter...");
+      adapter = new MongoDBAdapter(config);
+      break;
+      
+    case DatabaseProvider.LIBSQL:
     case DatabaseProvider.SQLSERVER:
     case DatabaseProvider.CLICKHOUSE:
     case DatabaseProvider.REDIS:
-    case DatabaseProvider.LIBSQL:
-    case DatabaseProvider.VALTOWN:
-    case DatabaseProvider.CLOUDFLARED1:
-    case DatabaseProvider.NEON:
       throw new Error(`${getProviderMetadata(config.provider).name} is not yet supported. Use PostgreSQL, MySQL, MongoDB, or SQLite for now.`);
        
     default:
-      throw new Error(`Unsupported database provider: ${config.provider}`);
+      console.log("[Connection] Creating PostgreSQL adapter for", config.provider, "...");
+      adapter = new PostgreSQLAdapter(config);
   }
 
   // Connect

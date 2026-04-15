@@ -38,17 +38,12 @@ export function validateConnectionConfig(config: unknown) {
       }
       break;
     case DatabaseProvider.LIBSQL:
-    case DatabaseProvider.SUPABASE:
-    case DatabaseProvider.PLANETSCALE:
-    case DatabaseProvider.NEON:
     case DatabaseProvider.VALTOWN:
     case DatabaseProvider.CLOUDFLARED1:
-      if (!parsed.connectionString) {
-        errors.push("connectionString is required for " + provider);
+      if (!parsed.connectionString && !parsed.host) {
+        errors.push("connectionString or host is required for " + provider);
       }
       break;
-    case DatabaseProvider.POSTGRESQL:
-    case DatabaseProvider.MYSQL:
     case DatabaseProvider.MARIADB:
     case DatabaseProvider.MONGODB:
     case DatabaseProvider.SQLSERVER:
@@ -56,7 +51,16 @@ export function validateConnectionConfig(config: unknown) {
     case DatabaseProvider.REDIS:
       if (!parsed.host) errors.push("host is required for " + provider);
       if (!parsed.database) errors.push("database may be required for " + provider);
-      if (!parsed.user && provider !== DatabaseProvider.REDIS) errors.push("user may be required for " + provider);
+      break;
+    case DatabaseProvider.POSTGRESQL:
+    case DatabaseProvider.MYSQL:
+    case DatabaseProvider.SUPABASE:
+    case DatabaseProvider.PLANETSCALE:
+    case DatabaseProvider.NEON:
+      // These can use connectionString OR host-based (PostgreSQL protocol)
+      if (!parsed.host && !parsed.connectionString) {
+        errors.push("host or connectionString is required");
+      }
       break;
   }
 
