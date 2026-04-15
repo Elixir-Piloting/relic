@@ -49,6 +49,22 @@ function ConnectionFormContent({ provider }: { provider: string }) {
   const [isSaving, setIsSaving] = useState(false);
   const [urlParseError, setUrlParseError] = useState<string | null>(null);
 
+  const isFormValid = (() => {
+    if (meta.connectionType === "file") {
+      return !!formData.filePath?.trim();
+    } else if (meta.connectionType === "url") {
+      return !!formData.connectionString?.trim();
+    } else if (meta.connectionType === "fields-or-url") {
+      const hasUrl = !!formData.connectionString?.trim();
+      const hasFields = !!formData.host?.trim() && !!formData.database?.trim() && !!formData.user?.trim();
+      return hasUrl || hasFields;
+    } else {
+      return !!formData.host?.trim() && !!formData.database?.trim() && !!formData.user?.trim();
+    }
+  })();
+
+  const isSaveValid = isFormValid && !!formData.name?.trim();
+
   useEffect(() => {
     const providerEnum = provider as DatabaseProvider;
     const meta = getProviderMetadata(providerEnum);
@@ -124,22 +140,40 @@ function ConnectionFormContent({ provider }: { provider: string }) {
 
   const handleTest = async () => {
     if (meta.connectionType === "file") {
-      if (!formData.filePath) {
+      if (!formData.filePath?.trim()) {
         toast.error("Please provide a file path");
         return;
       }
-    } else if (!formData.connectionString) {
-      toast.error("Please provide a connection URL");
-      return;
-    }
-
-    if (formData.connectionString) {
-      try {
-        parseConnectionURL(formData.connectionString);
-      } catch (error) {
-        toast.error("Invalid connection URL", {
-          description: error instanceof Error ? error.message : "Unknown error",
-        });
+    } else if (meta.connectionType === "url" || meta.connectionType === "fields-or-url") {
+      const hasConnectionString = formData.connectionString?.trim();
+      const hasFields = formData.host?.trim() && formData.database?.trim() && formData.user?.trim();
+      
+      if (!hasConnectionString && !hasFields) {
+        toast.error("Please provide a connection string OR host, database, and user");
+        return;
+      }
+      
+      if (hasConnectionString) {
+        try {
+          parseConnectionURL(formData.connectionString);
+        } catch (error) {
+          toast.error("Invalid connection URL", {
+            description: error instanceof Error ? error.message : "Unknown error",
+          });
+          return;
+        }
+      }
+    } else {
+      if (!formData.host?.trim()) {
+        toast.error("Please provide a host");
+        return;
+      }
+      if (!formData.database?.trim()) {
+        toast.error("Please provide a database");
+        return;
+      }
+      if (!formData.user?.trim()) {
+        toast.error("Please provide a user");
         return;
       }
     }
@@ -521,7 +555,7 @@ function ConnectionFormContent({ provider }: { provider: string }) {
         <Button
           variant="outline"
           onClick={handleTest}
-          disabled={isTesting}
+          disabled={isTesting || !isFormValid}
           className="gap-2"
         >
           {isTesting && <Loader2 className="h-4 w-4 animate-spin" />}
@@ -529,7 +563,7 @@ function ConnectionFormContent({ provider }: { provider: string }) {
         </Button>
         <Button
           onClick={handleSave}
-          disabled={isSaving}
+          disabled={isSaving || !isSaveValid}
           className="gap-2"
         >
           {isSaving && <Loader2 className="h-4 w-4 animate-spin" />}
