@@ -26,5 +26,7 @@ export function useSchemas(connectionId: string | undefined) {
     },
     enabled: !!connectionId,
     staleTime: 1000 * 60 * 5,
+    retry: 3,
+    retryDelay: 500,
   });
 }

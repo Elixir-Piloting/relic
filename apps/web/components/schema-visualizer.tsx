@@ -175,6 +175,8 @@ export function SchemaVisualizer({
       }
 
       const tablesData = await tablesRes.json();
+      console.log("[SchemaVisualizer] tablesData:", tablesData);
+      
       if (tablesData.error) {
         console.error("Error in tables response:", tablesData.error);
         setTables([]);
@@ -184,6 +186,7 @@ export function SchemaVisualizer({
       }
       
       const flatTables = (tablesData.tables || []).map((table: any) => ({ ...table, schema: selectedSchema }));
+      console.log("[SchemaVisualizer] flatTables:", flatTables);
       
       if (flatTables.length === 0) {
         console.warn(`No tables found in schema: ${selectedSchema}`);
@@ -193,7 +196,24 @@ export function SchemaVisualizer({
         return;
       }
 
-      // Load columns for all tables
+      // Add tables immediately with empty columns, then load columns async
+      const initialTables = flatTables.map((table: any, tableIndex: number) => {
+        const tableHeight = TABLE_HEADER_HEIGHT + TABLE_PADDING; // No columns yet
+        return {
+          id: `${table.schema}.${table.name}`,
+          schema: table.schema,
+          name: table.name,
+          columns: [],
+          x: (tableIndex % 6) * 280 + 50,
+          y: Math.floor(tableIndex / 6) * 250 + 50,
+          width: TABLE_MIN_WIDTH,
+          height: tableHeight,
+          zIndex: 0,
+        };
+      });
+      setTables(initialTables); // Set tables immediately
+      
+      // Load columns for all tables in background
       for (const table of flatTables) {
         try {
           const columnsRes = await fetch("/api/db/query", {
@@ -247,38 +267,28 @@ export function SchemaVisualizer({
 
           const columnCount = columns.length;
           const tableHeight = TABLE_HEADER_HEIGHT + (columnCount * COLUMN_HEIGHT) + TABLE_PADDING;
-          // Calculate width based on longest column name and type
           const maxNameLength = Math.max(...columns.map(c => c.name.length), 10);
           const maxTypeLength = Math.max(...columns.map(c => c.type.length), 15);
-          // Width = name area (45%) + type area (35%) + padding + icons (40px)
           const calculatedWidth = Math.max(
             TABLE_MIN_WIDTH,
             Math.max(maxNameLength * 7, maxTypeLength * 6) + 60
           );
-          const tableWidth = Math.min(calculatedWidth, 350); // Cap at 350px for readability
+          const tableWidth = Math.min(calculatedWidth, 350);
 
-          allTables.push({
-            id: `${table.schema}.${table.name}`,
-            schema: table.schema,
-            name: table.name,
-            columns,
-            x: (tableIndex % 6) * 280 + 50,
-            y: Math.floor(tableIndex / 6) * 250 + 50,
-            width: tableWidth,
-            height: tableHeight,
-            zIndex: 0, // Default z-index
-          });
-          tableIndex++;
+          const tableId = `${table.schema}.${table.name}`;
+          setTables(prev => prev.map(t => 
+            t.id === tableId 
+              ? { ...t, columns, width: tableWidth, height: tableHeight }
+              : t
+          ));
         } catch (err) {
           console.error(`Failed to load columns for ${table.schema}.${table.name}:`, err);
         }
       }
 
-      setTables(allTables);
-
       // Load relationships for tables in the selected schema
       const allRelationships: RelationshipEdge[] = [];
-      const relationshipPromises = allTables.map(async (table) => {
+      const relationshipPromises = flatTables.map(async (table) => {
         try {
           const [outgoingRes, incomingRes] = await Promise.all([
             fetch(

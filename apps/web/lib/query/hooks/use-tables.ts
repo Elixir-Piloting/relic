@@ -24,5 +24,7 @@ export function useTables(connectionId: string | undefined, schema: string | und
     },
     enabled: !!connectionId && !!schema,
     staleTime: 1000 * 60 * 5,
+    retry: 3,
+    retryDelay: 500,
   });
 }
