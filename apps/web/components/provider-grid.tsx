@@ -33,14 +33,14 @@ export function ProviderGrid({ onSelect }: ProviderGridProps) {
           )}
         >
           <div
-            className="w-10 h-10 rounded-md flex items-center justify-center shrink-0"
+            className="w-10 h-10 rounded-full flex items-center justify-center shrink-0"
             style={{ backgroundColor: provider.color + "20" }}
           >
             {provider.iconType === "image" ? (
               <img
                 src={provider.icon}
                 alt={provider.name}
-                className="w-7 h-7 object-contain"
+                className="w-7 h-7 object-contain rounded-full"
                 onError={(e) => {
                   const target = e.currentTarget as HTMLImageElement;
                   target.style.display = "none";

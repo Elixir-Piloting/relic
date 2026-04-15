@@ -19,29 +19,21 @@ export async function getSchemas(): Promise<string[]> {
     return getMongoDBSchemas();
   }
   
-  console.log("[Schema Introspect] Executing schema query...");
+  // SQLite - there's only one "main" schema
+  if (config?.provider === DatabaseProvider.SQLITE) {
+    return ["main"];
+  }
+  
   const query = `SELECT schema_name 
      FROM information_schema.schemata 
      WHERE schema_name NOT IN ('pg_catalog', 'information_schema', 'pg_toast', 'pg_toast_temp_1')
      ORDER BY CASE WHEN schema_name = 'public' THEN 0 ELSE 1 END, schema_name`;
-  console.log("[Schema Introspect] Query:", query);
   
   try {
     const result = await executeQuery<{ schema_name: string }>(query);
-    console.log("[Schema Introspect] Query completed successfully");
-    console.log("[Schema Introspect] Row count:", result.rowCount);
-    console.log("[Schema Introspect] Rows:", JSON.stringify(result.rows, null, 2));
-    console.log("[Schema Introspect] First row:", result.rows[0]);
-    
-    const schemas = result.rows.map((r) => r.schema_name);
-    console.log("[Schema Introspect] Mapped schemas:", schemas, "count:", schemas.length);
-    return schemas;
+    return result.rows.map((r) => r.schema_name);
   } catch (error) {
-    console.error("[Schema Introspect] Query failed:", error);
-    console.error("[Schema Introspect] Error details:", {
-      message: error instanceof Error ? error.message : "Unknown error",
-      stack: error instanceof Error ? error.stack : undefined,
-    });
+    console.error("[Schema Introspect] Get schemas failed:", error instanceof Error ? error.message : error);
     throw error;
   }
 }
@@ -49,12 +41,23 @@ export async function getSchemas(): Promise<string[]> {
 /**
  * Get all tables/collections in a schema (provider-aware)
  */
-export async function getTables(schema: string = "public"): Promise<TableInfo[]> {
+export async function getTables(schema: string = "main"): Promise<TableInfo[]> {
   const config = getCurrentConfig();
   
   // MongoDB uses collections instead of tables
   if (config?.provider === DatabaseProvider.MONGODB) {
     return getMongoDBCollections(schema);
+  }
+  
+  // SQLite uses a different query
+  if (config?.provider === DatabaseProvider.SQLITE) {
+    const result = await executeQuery<{ name: string }>(
+      `SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name`
+    );
+    return result.rows.map((r) => ({
+      schema: "main",
+      name: r.name,
+    }));
   }
   
   const result = await executeQuery<{
@@ -89,6 +92,14 @@ export async function getTableRowCount(
     return getMongoDBCollectionCount(table);
   }
   
+  // SQLite uses different syntax (no schema prefix)
+  if (config?.provider === DatabaseProvider.SQLITE) {
+    const result = await executeQuery<{ count: number }>(
+      `SELECT COUNT(*) as count FROM "${table}"`
+    );
+    return result.rows[0].count;
+  }
+  
   const result = await executeQuery<{ count: string }>(
     `SELECT COUNT(*) as count FROM "${schema}"."${table}"`
   );
@@ -102,6 +113,27 @@ export async function getColumns(
   schema: string,
   table: string
 ): Promise<ColumnInfo[]> {
+  const config = getCurrentConfig();
+  
+  // SQLite uses PRAGMA to get column info
+  if (config?.provider === DatabaseProvider.SQLITE) {
+    const result = await executeQuery<{
+      cid: number;
+      name: string;
+      type: string;
+      notnull: number;
+      dflt_value: string | null;
+    }>(`PRAGMA table_info("${table}")`);
+    
+    return result.rows.map((r) => ({
+      name: r.name,
+      dataType: r.type || "TEXT",
+      isNullable: r.notnull === 0,
+      defaultValue: r.dflt_value,
+      characterMaximumLength: null,
+    }));
+  }
+  
   const result = await executeQuery<{
     column_name: string;
     data_type: string;

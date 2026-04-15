@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ConnectionConfigSchema } from "@/lib/db/types";
+import { validateConnectionConfig } from "@/lib/db/types";
 import { connect, disconnect, getPool } from "@/lib/db/connection";
 
 /**
@@ -11,7 +11,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     console.log("[Connect API] Request body received:", { ...body, password: body.password ? "***" : "missing" });
     
-    const config = ConnectionConfigSchema.parse(body);
+    const config = validateConnectionConfig(body);
     console.log("[Connect API] Config validated:", { ...config, password: "***" });
     
     // Disconnect any existing connection

@@ -1,5 +1,5 @@
 import type { ConnectionConfig } from "./types";
-import { DatabaseProvider } from "./providers";
+import { DatabaseProvider, getProviderMetadata } from "./providers";
 import { PostgreSQLAdapter } from "./adapters/postgresql";
 import { MongoDBAdapter } from "./adapters/mongodb";
 import { MySQLAdapter } from "./adapters/mysql";
@@ -87,15 +87,21 @@ export async function connect(config: ConnectionConfig): Promise<void> {
       adapter = new MySQLAdapter(config);
       break;
       
-    case DatabaseProvider.SQLITE:
+case DatabaseProvider.SQLITE:
       console.log("[Connection] Creating SQLite adapter...");
       adapter = new SQLiteAdapter(config);
       break;
       
+    case DatabaseProvider.MARIADB:
+    case DatabaseProvider.SQLSERVER:
+    case DatabaseProvider.CLICKHOUSE:
+    case DatabaseProvider.REDIS:
     case DatabaseProvider.LIBSQL:
-      // LibSQL/Turso uses HTTP API, needs special implementation
-      throw new Error("LibSQL/Turso support is not yet implemented");
-      
+    case DatabaseProvider.VALTOWN:
+    case DatabaseProvider.CLOUDFLARED1:
+    case DatabaseProvider.NEON:
+      throw new Error(`${getProviderMetadata(config.provider).name} is not yet supported. Use PostgreSQL, MySQL, MongoDB, or SQLite for now.`);
+       
     default:
       throw new Error(`Unsupported database provider: ${config.provider}`);
   }

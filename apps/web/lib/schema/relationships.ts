@@ -1,4 +1,5 @@
-import { executeQuery } from "@/lib/db/connection";
+import { executeQuery, getCurrentConfig } from "@/lib/db/connection";
+import { DatabaseProvider } from "@/lib/db/providers";
 
 export interface ForeignKeyRelationship {
   constraintName: string;
@@ -23,6 +24,29 @@ export async function getTableRelationships(
   schema: string,
   table: string
 ): Promise<ForeignKeyRelationship[]> {
+  const config = getCurrentConfig();
+  
+  // SQLite uses PRAGMA
+  if (config?.provider === DatabaseProvider.SQLITE) {
+    const result = await executeQuery<{
+      id: number;
+      seq: number;
+      table: string;
+      from: string;
+      to: string;
+    }>(`PRAGMA foreign_key_list("${table}")`);
+    
+    return result.rows.map((r) => ({
+      constraintName: `fk_${r.table}_${r.from}`,
+      fromSchema: "main",
+      fromTable: table,
+      fromColumn: r.from,
+      toSchema: "main",
+      toTable: r.table,
+      toColumn: r.to,
+    }));
+  }
+  
   const query = `
     SELECT
       tc.constraint_name,
@@ -73,6 +97,44 @@ export async function getReferencingTables(
   schema: string,
   table: string
 ): Promise<ForeignKeyRelationship[]> {
+  const config = getCurrentConfig();
+  
+  // SQLite - find all tables that reference this table
+  if (config?.provider === DatabaseProvider.SQLITE) {
+    // Get all tables and their foreign keys
+    const tables = await executeQuery<{ name: string }>(
+      `SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'`
+    );
+    
+    const relationships: ForeignKeyRelationship[] = [];
+    
+    for (const t of tables.rows) {
+      const fks = await executeQuery<{
+        id: number;
+        seq: number;
+        table: string;
+        from: string;
+        to: string;
+      }>(`PRAGMA foreign_key_list("${t.name}")`);
+      
+      for (const fk of fks.rows) {
+        if (fk.table === table) {
+          relationships.push({
+            constraintName: `fk_${t.name}_${fk.from}`,
+            fromSchema: "main",
+            fromTable: t.name,
+            fromColumn: fk.from,
+            toSchema: "main",
+            toTable: table,
+            toColumn: fk.to,
+          });
+        }
+      }
+    }
+    
+    return relationships;
+  }
+  
   const query = `
     SELECT
       tc.constraint_name,

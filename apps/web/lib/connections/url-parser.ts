@@ -7,9 +7,11 @@
  * - MongoDB Atlas: mongodb+srv://user:password@host/database
  * - SQLite: sqlite:///path/to/database.db
  * - LibSQL/Turso: libsql://host/database
+ * - Redis: redis://user:password@host:port
+ * - ClickHouse: clickhouse://user:password@host:port/database
  */
 
-import { DatabaseProvider } from "@/lib/db/providers";
+import { DatabaseProvider, detectProviderFromConnectionString } from "@/lib/db/providers";
 
 export interface ParsedConnectionURL {
   provider?: DatabaseProvider;
@@ -37,6 +39,8 @@ export function parseConnectionURL(url: string): ParsedConnectionURL {
   const isPostgreSQL = url.startsWith("postgresql://") || url.startsWith("postgres://");
   const isSQLite = url.startsWith("sqlite://");
   const isLibSQL = url.startsWith("libsql://");
+  const isRedis = url.startsWith("redis://");
+  const isClickHouse = url.startsWith("clickhouse://");
 
   // MongoDB SRV format (mongodb+srv://) doesn't use ports
   if (isMongoDB && url.startsWith("mongodb+srv://")) {
@@ -101,6 +105,8 @@ export function parseConnectionURL(url: string): ParsedConnectionURL {
       if (isMySQL) provider = DatabaseProvider.MYSQL;
       else if (isMongoDB) provider = DatabaseProvider.MONGODB;
       else if (isLibSQL) provider = DatabaseProvider.LIBSQL;
+      else if (isRedis) provider = DatabaseProvider.REDIS;
+      else if (isClickHouse) provider = DatabaseProvider.CLICKHOUSE;
       
       return {
         provider,
@@ -125,15 +131,15 @@ export function parseConnectionURL(url: string): ParsedConnectionURL {
     // Strategy: Start from the end, find the first @ going backwards (before the host)
     
     // Match different database protocols
-    const protocolMatch = url.match(/^(postgresql|postgres|mysql|mongodb|libsql):\/\//);
+    const protocolMatch = url.match(/^(postgresql|postgres|mysql|mongodb|libsql|redis|clickhouse):\/\//);
     if (!protocolMatch) {
-      throw new Error("Invalid connection URL format. Supported: postgresql://, mysql://, mongodb://, libsql://");
+      throw new Error("Invalid connection URL format. Supported: postgresql://, mysql://, mongodb://, libsql://, redis://, clickhouse://");
     }
     
     const protocol = protocolMatch[1];
     const afterProtocol = url.substring(protocolMatch[0].length);
     
-    // Find the first / (which marks the database) - MongoDB might not have it
+    // Find the first / (which marks the database) - some databases might not have it
     const dbSlashIndex = afterProtocol.indexOf('/');
     let beforeDb: string;
     let afterDb: string;
@@ -141,7 +147,6 @@ export function parseConnectionURL(url: string): ParsedConnectionURL {
     let queryString = "";
     
     if (dbSlashIndex === -1) {
-      // No database specified (MongoDB allows this)
       beforeDb = afterProtocol;
       afterDb = "";
     } else {
@@ -152,8 +157,7 @@ export function parseConnectionURL(url: string): ParsedConnectionURL {
       [database, queryString = ""] = afterDb.split('?');
     }
     
-    // Find the last @ in beforeDb - this separates credentials from host:port
-    // Start from the end and work backwards to find the @ that separates credentials from host
+    // Find the last @ in beforeDb
     const lastAt = beforeDb.lastIndexOf('@');
     
     let user = "";
@@ -161,16 +165,12 @@ export function parseConnectionURL(url: string): ParsedConnectionURL {
     let hostPort = beforeDb;
     
     if (lastAt !== -1) {
-      // Everything before the last @ is credentials (user:password)
       const credentials = beforeDb.substring(0, lastAt);
-      // Everything after the last @ is host:port
       hostPort = beforeDb.substring(lastAt + 1);
       
-      // Split credentials on the first : only (password can contain : too)
       const colonIndex = credentials.indexOf(':');
       if (colonIndex !== -1) {
         user = credentials.substring(0, colonIndex);
-        // Password is everything after the first : (can contain @, :, etc.)
         password = credentials.substring(colonIndex + 1);
       } else {
         user = credentials;
@@ -184,6 +184,8 @@ export function parseConnectionURL(url: string): ParsedConnectionURL {
     let defaultPort = 5432; // PostgreSQL default
     if (protocol === "mysql") defaultPort = 3306;
     else if (protocol === "mongodb") defaultPort = 27017;
+    else if (protocol === "redis") defaultPort = 6379;
+    else if (protocol === "clickhouse") defaultPort = 9000;
     
     const port = portStr ? parseInt(portStr, 10) : defaultPort;
     
@@ -206,8 +208,10 @@ export function parseConnectionURL(url: string): ParsedConnectionURL {
     if (protocol === "mysql") provider = DatabaseProvider.MYSQL;
     else if (protocol === "mongodb") provider = DatabaseProvider.MONGODB;
     else if (protocol === "libsql") provider = DatabaseProvider.LIBSQL;
+    else if (protocol === "redis") provider = DatabaseProvider.REDIS;
+    else if (protocol === "clickhouse") provider = DatabaseProvider.CLICKHOUSE;
     
-    return {
+return {
       provider,
       host: decodedHost,
       port,

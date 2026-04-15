@@ -5,25 +5,67 @@ export const ConnectionConfigSchema = z.object({
   id: z.string(),
   name: z.string().min(1),
   provider: z.nativeEnum(DatabaseProvider),
-  host: z.string().min(1).optional(),
-  port: z.number().int().min(1).max(65535).optional(),
-  database: z.string().min(1).optional(),
-  user: z.string().min(1).optional(),
-  password: z.string().optional(),
-  // For file-based databases (SQLite)
+  // File path (for file-based providers like SQLite)
   filePath: z.string().optional(),
-  // For connection strings
+  // Connection string (for URL-based providers like LibSQL, Supabase, PlanetScale)
   connectionString: z.string().optional(),
-  // Connection options
+  // Network connection fields
+  host: z.string().optional(),
+  port: z.number().int().min(1).max(65535).optional(),
+  database: z.string().optional(),
+  user: z.string().optional(),
+  password: z.string().optional(),
   ssl: z.boolean().optional(),
+  // SSH tunnel configuration
   ssh: z.boolean().optional(),
-  // SSH tunnel configuration (used when ssh is true)
   sshHost: z.string().optional(),
   sshPort: z.number().int().min(1).max(65535).optional(),
   sshUser: z.string().optional(),
   sshKeyPath: z.string().optional(),
   sshPassword: z.string().optional(),
 });
+
+export function validateConnectionConfig(config: unknown) {
+  const parsed = ConnectionConfigSchema.parse(config);
+  const provider = parsed.provider;
+
+  const errors: string[] = [];
+
+  switch (provider) {
+    case DatabaseProvider.SQLITE:
+      if (!parsed.filePath) {
+        errors.push("filePath is required for SQLite");
+      }
+      break;
+    case DatabaseProvider.LIBSQL:
+    case DatabaseProvider.SUPABASE:
+    case DatabaseProvider.PLANETSCALE:
+    case DatabaseProvider.NEON:
+    case DatabaseProvider.VALTOWN:
+    case DatabaseProvider.CLOUDFLARED1:
+      if (!parsed.connectionString) {
+        errors.push("connectionString is required for " + provider);
+      }
+      break;
+    case DatabaseProvider.POSTGRESQL:
+    case DatabaseProvider.MYSQL:
+    case DatabaseProvider.MARIADB:
+    case DatabaseProvider.MONGODB:
+    case DatabaseProvider.SQLSERVER:
+    case DatabaseProvider.CLICKHOUSE:
+    case DatabaseProvider.REDIS:
+      if (!parsed.host) errors.push("host is required for " + provider);
+      if (!parsed.database) errors.push("database may be required for " + provider);
+      if (!parsed.user && provider !== DatabaseProvider.REDIS) errors.push("user may be required for " + provider);
+      break;
+  }
+
+  if (errors.length > 0) {
+    throw new Error(errors.join(", "));
+  }
+
+  return parsed;
+}
 
 export type ConnectionConfig = z.infer<typeof ConnectionConfigSchema>;
 
