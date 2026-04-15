@@ -85,20 +85,23 @@ function ConnectionFormContent({ provider }: { provider: string }) {
 
   const meta = getProviderMetadata(formData.provider);
 
-  const isFormValid = (() => {
-    if (meta.connectionType === "file") {
+  const checkFormValid = (_meta: typeof meta) => {
+    if (_meta.connectionType === "file") {
       return !!formData.filePath?.trim();
-    } else if (meta.connectionType === "url") {
+    } else if (_meta.connectionType === "url") {
       return !!formData.connectionString?.trim();
-    } else if (meta.connectionType === "fields-or-url") {
+    } else if (_meta.connectionType === "fields-or-url") {
       const hasUrl = !!formData.connectionString?.trim();
       const hasFields = !!formData.host?.trim() && !!formData.database?.trim() && !!formData.user?.trim();
       return hasUrl || hasFields;
     } else {
       return !!formData.host?.trim() && !!formData.database?.trim() && !!formData.user?.trim();
     }
-  })();
+  };
 
+  // Test doesn't require name, just the connection fields
+  const isFormValid = checkFormValid(meta);
+  // Save requires name + connection fields
   const isSaveValid = isFormValid && !!formData.name?.trim();
 
   const updateFormField = (field: string, value: unknown) => {
