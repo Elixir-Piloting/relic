@@ -48,6 +48,7 @@ function ConnectionFormContent({ provider }: { provider: string }) {
   const [isTesting, setIsTesting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [urlParseError, setUrlParseError] = useState<string | null>(null);
+  const [statusMessage, setStatusMessage] = useState<{type: 'success' | 'error'; message: string} | null>(null);
 
   useEffect(() => {
     const providerEnum = provider as DatabaseProvider;
@@ -195,11 +196,9 @@ function ConnectionFormContent({ provider }: { provider: string }) {
         throw new Error(error.error || "Connection failed");
       }
 
-      toast.success("Connection successful!");
+      setStatusMessage({type: 'success', message: 'Connection successful!'});
     } catch (error) {
-      toast.error("Connection failed", {
-        description: error instanceof Error ? error.message : "Unknown error",
-      });
+      setStatusMessage({type: 'error', message: error instanceof Error ? error.message : 'Connection failed'});
     } finally {
       setIsTesting(false);
     }
@@ -285,15 +284,11 @@ function ConnectionFormContent({ provider }: { provider: string }) {
       
       Persistence.setActiveConnectionId(config.id);
       
-      toast.success("Connection saved", {
-        description: `Saved connection "${config.name}"`,
-      });
+      setStatusMessage({type: 'success', message: `Saved connection "${config.name}"`});
 
       router.push(`/db/${config.id}`);
     } catch (error) {
-      toast.error("Failed to save connection", {
-        description: error instanceof Error ? error.message : "Unknown error",
-      });
+      setStatusMessage({type: 'error', message: error instanceof Error ? error.message : "Failed to save connection"});
     } finally {
       setIsSaving(false);
     }
@@ -553,6 +548,16 @@ function ConnectionFormContent({ provider }: { provider: string }) {
             )}
           </div>
         </>
+      )}
+
+      {statusMessage && (
+        <div className={`p-4 rounded-lg border ${
+          statusMessage.type === 'success' 
+            ? 'bg-green-500/10 text-green-700 border-green-500/30' 
+            : 'bg-destructive/10 text-destructive border-destructive/30'
+        }`}>
+          {statusMessage.message}
+        </div>
       )}
 
       <div className="flex gap-4">
