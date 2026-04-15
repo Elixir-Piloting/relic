@@ -1,8 +1,9 @@
-/**
- * SQLite adapter using better-sqlite3
- */
+// // SQLite adapter with file existence check
+//  * SQLite adapter using better-sqlite3
+//  */
 
 import Database from "better-sqlite3";
+import fs from "fs";
 import type { ConnectionConfig } from "../types";
 import type { DatabaseAdapter, QueryResult } from "./base";
 
@@ -15,8 +16,23 @@ export class SQLiteAdapter implements DatabaseAdapter {
   }
 
   async connect(): Promise<void> {
+
+
     if (!this.config.filePath) {
       throw new Error("SQLite requires a file path");
+    }
+
+    // Verify that the file exists and is readable; if it does not exist, create an empty SQLite file
+    try {
+      fs.accessSync(this.config.filePath, fs.constants.R_OK);
+    } catch {
+      // Create an empty file to allow SQLite to initialize a new database
+      try {
+        fs.writeFileSync(this.config.filePath, "");
+        console.log(`[SQLite] Created new database file at ${this.config.filePath}`);
+      } catch (createErr) {
+        throw new Error(`SQLite file could not be created or accessed: ${this.config.filePath}`);
+      }
     }
 
     console.log("[SQLite] Opening database:", this.config.filePath);
@@ -40,10 +56,10 @@ export class SQLiteAdapter implements DatabaseAdapter {
     try {
       const stmt = this.db.prepare(query);
       const result = params && params.length > 0 ? stmt.all(...params) : stmt.all();
-      
+
       // Get column info from the statement
       const columns = stmt.columns();
-      
+
       return {
         rows: result as T[],
         rowCount: Array.isArray(result) ? result.length : 0,

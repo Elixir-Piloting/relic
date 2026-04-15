@@ -2,6 +2,9 @@
   "name": "relic-monorepo",
   "version": "0.1.0",
   "private": true,
+  "pnpm": {
+    "onlyBuiltDependencies": ["electron"]
+  },
   "scripts": {
     "dev:web": "pnpm --filter @relic/web dev",
     "dev:desktop": "pnpm --filter @relic/desktop dev",

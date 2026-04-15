@@ -564,15 +564,33 @@ export function ConnectionForm({
 
               if (providerMeta.connectionType === "file") {
                 return (
-                  <div className="grid gap-2">
-                    <Label htmlFor="filePath">Database File Path</Label>
-                    <Input
-                      id="filePath"
-                      value={formData.filePath || ""}
-                      onChange={(e) => setFormData({ ...formData, filePath: e.target.value })}
-                      placeholder="/path/to/database.db"
-                    />
-                  </div>
+<div className="grid gap-2 flex items-center">
+  <Label htmlFor="filePath" className="mr-2">Database File Path</Label>
+  <Input
+    id="filePath"
+    value={formData.filePath || ""}
+    onChange={(e) => setFormData({ ...formData, filePath: e.target.value })}
+    placeholder="/path/to/database.db"
+    className="flex-1"
+  />
+  <Button type="button" variant="outline" onClick={() => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.db,.sqlite,.sqlite3';
+    input.onchange = (e) => {
+      const files = (e.target as HTMLInputElement).files;
+      if (files && files.length > 0) {
+        const file = files[0];
+        // In browsers, file.path is undefined; use name as fallback
+        const path = (file as any).path || file.name;
+        setFormData({ ...formData, filePath: path });
+      }
+    };
+    input.click();
+  }} className="ml-2">
+    Browse
+  </Button>
+</div>
                 );
               }
 

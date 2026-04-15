@@ -5,9 +5,9 @@ import { useParams } from "next/navigation";
 import { MainLayout } from "@/components/main-layout";
 import { DatabaseNavbar } from "@/components/database-navbar";
 import { SchemaVisualizer } from "@/components/schema-visualizer";
-import { getConnectionAsyncAsync } from "@/lib/connections/store";
 import { Persistence } from "@/lib/persistence";
 import type { ConnectionConfig } from "@/lib/db/types";
+import { getConnectionAsync } from "@/lib/connections/store";
 
 export default function VisualizerPage() {
   const params = useParams();
@@ -18,7 +18,7 @@ export default function VisualizerPage() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (initializedRef.current === connectionId) return;
-    
+
     getConnectionAsync(connectionId).then(conn => {
       if (!conn) {
         return;
@@ -28,7 +28,7 @@ export default function VisualizerPage() {
       setConnection(conn);
       Persistence.setActiveConnectionId(connectionId);
       Persistence.setActiveView(connectionId, "visualizer");
-      
+
       fetch("/api/db/connect", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

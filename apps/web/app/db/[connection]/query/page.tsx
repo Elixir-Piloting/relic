@@ -26,7 +26,6 @@ import {
 } from "@/components/ui/dialog";
 import { Play, Plus, Eye, Bookmark, Save } from "lucide-react";
 import { SavedQueries } from "@/lib/query/saved-queries";
-import { getConnectionAsyncAsync } from "@/lib/connections/store";
 import { Persistence } from "@/lib/persistence";
 import type { ConnectionConfig, QueryResult } from "@/lib/db/types";
 import { DatabaseProvider } from "@/lib/db/providers";
@@ -34,6 +33,7 @@ import { analyzeQuery, shouldBlockQuery, type QueryAnalysis } from "@/lib/query/
 import type { SavedQuery } from "@/lib/query/saved-queries";
 import { useExecuteQuery } from "@/lib/query/hooks/use-query";
 import { useConnect } from "@/lib/query/mutations/use-connect";
+import { getConnectionAsync } from "@/lib/connections/store";
 
 function getDefaultQuery(provider?: DatabaseProvider): string {
   if (provider === DatabaseProvider.MONGODB) {
@@ -50,7 +50,7 @@ export default function QueryPage() {
   const params = useParams();
   const router = useRouter();
   const connectionId = params.connection as string;
-  
+
   const [connection, setConnection] = useState<ConnectionConfig | null>(null);
   const [queryTabs, setQueryTabs] = useState<QueryTab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
@@ -123,8 +123,8 @@ export default function QueryPage() {
     const newTab: QueryTab = {
       id: tabId,
       label: `Query ${queryTabs.length + 1}`,
-      query: getDefaultQuery(connection?.provider),
-    };
+      query: getDefaultQuery(connection?.provider)
+    }
     setQueryTabs((prev) => [...prev, newTab]);
     setActiveTabId(tabId);
   }, [queryTabs.length, connection?.provider]);
@@ -216,18 +216,18 @@ export default function QueryPage() {
 
   const executeQueryClick = useCallback(async () => {
     if (!currentQuery.trim()) return;
-    
+
     if (safeMode && connection) {
       const analysis = analyzeQuery(currentQuery);
       const blockResult = shouldBlockQuery(analysis, safeMode);
-      
+
       if (blockResult.blocked) {
         toast.error("Query blocked by Safe Mode", {
           description: blockResult.reason,
         });
         return;
       }
-      
+
       if (analysis.isDestructive) {
         setPendingQuery(currentQuery);
         setQueryAnalysis(analysis);
@@ -235,7 +235,7 @@ export default function QueryPage() {
         return;
       }
     }
-    
+
     await executeQueryInternal(currentQuery);
   }, [currentQuery, executeQueryInternal, safeMode, connection]);
 
@@ -257,7 +257,7 @@ export default function QueryPage() {
       const init = async () => {
         try {
           await connectMutation.mutateAsync({ config: conn });
-          
+
           const savedTabs = Persistence.getQueryTabs(connectionId);
           const savedActiveTabId = Persistence.getActiveQueryTabId(connectionId);
 
@@ -283,7 +283,8 @@ export default function QueryPage() {
         }
       };
 
-    init();
+      init();
+    });
   }, [connectionId, connectMutation]);
 
   useEffect(() => {
@@ -350,11 +351,11 @@ export default function QueryPage() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (!connectionId) return;
-    
+
     if (connection) {
       return;
     }
-    
+
     if (!initializedRef.current) {
       return;
     }
@@ -398,7 +399,7 @@ export default function QueryPage() {
     <MainLayout>
       <div className="flex flex-col h-full">
         <DatabaseNavbar connectionId={connection.id} />
-        
+
         <div className="flex flex-1 min-h-0">
           {showSavedQueries && (
             <div className="w-80 border-r border-border flex flex-col shrink-0">
@@ -409,7 +410,7 @@ export default function QueryPage() {
               />
             </div>
           )}
-          
+
           <div className="flex flex-col flex-1 min-w-0">
             <QueryTabs
               tabs={queryTabs}

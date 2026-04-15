@@ -251,13 +251,32 @@ function ConnectionFormContent({ provider }: { provider: string }) {
       return (
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="filePath">Database File Path</Label>
-            <Input
-              id="filePath"
-              value={formData.filePath || ""}
-              onChange={(e) => updateFormField("filePath", e.target.value)}
-              placeholder="/path/to/database.db"
-            />
+            <Label htmlFor="filePath" className="mr-2">Database File Path</Label>
+            <div className="flex items-center gap-2">
+              <Input
+                id="filePath"
+                value={formData.filePath || ""}
+                onChange={(e) => updateFormField("filePath", e.target.value)}
+                placeholder="/path/to/database.db"
+                className="flex-1"
+              />
+              <Button type="button" variant="outline" onClick={() => {
+                const input = document.createElement('input');
+                input.type = 'file';
+                input.accept = '.db,.sqlite,.sqlite3';
+                input.onchange = (e) => {
+                  const files = (e.target as HTMLInputElement).files;
+                  if (files && files.length > 0) {
+                    const file = files[0];
+                    const path = (file as any).path || file.name;
+                    updateFormField('filePath', path);
+                  }
+                };
+                input.click();
+              }} className="ml-2">
+                Browse
+              </Button>
+            </div>
           </div>
         </div>
       );

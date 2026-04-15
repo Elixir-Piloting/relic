@@ -40,6 +40,7 @@ function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       webSecurity: true,
+      sandbox: false,
       preload: path.join(__dirname, "preload.js"),
     },
   });
@@ -175,6 +176,9 @@ ipcMain.handle("save-file", async (_event, data: string, defaultFilename: string
     return { canceled: true, error: error instanceof Error ? error.message : "Unknown error" };
   }
 });
+
+app.commandLine.appendSwitch("no-sandbox");
+app.commandLine.appendSwitch("disable-setuid-sandbox");
 
 app.whenReady().then(() => {
   // No native menu bar - using custom title bar instead

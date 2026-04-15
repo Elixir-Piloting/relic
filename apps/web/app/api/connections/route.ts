@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import { DatabaseProvider } from "@/lib/db/providers";
 import { z } from "zod";
 import { ConnectionConfigSchema } from "@/lib/db/types";
 import { connect, disconnect, getCurrentConfig } from "@/lib/db/connection";
 
-const CreateConnectionSchema = ConnectionConfigSchema.omit({ id: true });
+const CreateConnectionSchema = ConnectionConfigSchema.omit({ id: true }).partial({ name: true });
 
 /**
  * GET /api/connections - Get all saved connections
@@ -21,6 +22,17 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
+    console.log('[API] Received connection payload:', body);
+    // Clean up fields not relevant for file‑based providers (e.g., SQLite)
+    if (body.provider === DatabaseProvider.SQLITE) {
+      // Remove fields that are required only for network providers
+      delete body.host;
+      delete body.port;
+      delete body.database;
+      delete body.user;
+      delete body.password;
+      delete body.connectionString;
+    }
     const config = CreateConnectionSchema.parse(body);
     
     // Test connection

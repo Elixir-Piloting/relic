@@ -6,7 +6,7 @@
   "author": "Relic",
   "description": "Relic Database Admin - Desktop App",
   "scripts": {
-    "dev": "pnpm run compile && concurrently \"pnpm run dev:next\" \"wait-on http://localhost:3000 && electron .\"",
+    "dev": "pnpm run compile && concurrently \"pnpm run dev:next\" \"wait-on http://localhost:3000 && electron . --no-sandbox\"",
     "dev:next": "pnpm --filter @relic/web dev",
     "build": "pnpm run build:next && pnpm run build:electron",
     "build:next": "pnpm --filter @relic/web build:electron",
