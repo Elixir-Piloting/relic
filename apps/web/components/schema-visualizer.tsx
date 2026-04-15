@@ -370,8 +370,6 @@ export function SchemaVisualizer({
     }
   }, [connectionId]);
 
-  const schemaLoadRef = useRef<string | null>(null);
-
   useEffect(() => {
     if (!connectionId) {
       console.log("[SchemaVisualizer] No connectionId, clearing state");
@@ -379,18 +377,10 @@ export function SchemaVisualizer({
       setRelationships([]);
       setAvailableSchemas([]);
       setCurrentSchema(null);
-      schemaLoadRef.current = null;
       return;
     }
 
     console.log("[SchemaVisualizer] useEffect fired with connectionId:", connectionId);
-
-    // Prevent double-loading for the same connectionId
-    if (schemaLoadRef.current === connectionId) {
-      console.log("[SchemaVisualizer] Already loaded for this connectionId");
-      return;
-    }
-    schemaLoadRef.current = connectionId;
 
     // Small delay to ensure connection is established, then load schemas
     const timer = setTimeout(() => {
