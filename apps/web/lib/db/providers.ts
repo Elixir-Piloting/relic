@@ -33,6 +33,7 @@ export interface ProviderMetadata {
   urlPlaceholder?: string;
   urlProtocol?: string;
   connectionStringPatterns?: RegExp[];
+  supported?: boolean;
 }
 
 export const PROVIDER_METADATA: Record<DatabaseProvider, ProviderMetadata> = {
@@ -157,6 +158,7 @@ export const PROVIDER_METADATA: Record<DatabaseProvider, ProviderMetadata> = {
     urlPlaceholder: "libsql://host/database",
     urlProtocol: "libsql://",
     connectionStringPatterns: [/^libsql: /i],
+    supported: false,
   },
   [DatabaseProvider.VALTOWN]: {
     id: DatabaseProvider.VALTOWN,

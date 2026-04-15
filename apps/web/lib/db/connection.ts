@@ -107,15 +107,15 @@ case DatabaseProvider.SQLITE:
       adapter = new MySQLAdapter(config);
       break;
       
-    case DatabaseProvider.MONGODB:
+case DatabaseProvider.MONGODB:
       console.log("[Connection] Creating MongoDB adapter...");
       adapter = new MongoDBAdapter(config);
       break;
       
+    case DatabaseProvider.REDIS:
     case DatabaseProvider.LIBSQL:
     case DatabaseProvider.SQLSERVER:
     case DatabaseProvider.CLICKHOUSE:
-    case DatabaseProvider.REDIS:
       throw new Error(`${getProviderMetadata(config.provider).name} is not yet supported. Use PostgreSQL, MySQL, MongoDB, or SQLite for now.`);
        
     default:

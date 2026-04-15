@@ -10,7 +10,8 @@ interface ProviderGridProps {
 
 export function ProviderGrid({ onSelect }: ProviderGridProps) {
   const router = useRouter();
-  const providers = getAllProviders();
+  // Only show supported providers
+  const providers = getAllProviders().filter(p => p.supported !== false);
 
   const handleSelect = (provider: DatabaseProvider) => {
     if (onSelect) {
