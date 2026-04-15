@@ -100,9 +100,10 @@ function ConnectionFormContent({ provider }: { provider: string }) {
   };
 
   // Test doesn't require name, just the connection fields
-  const isFormValid = checkFormValid(meta);
-  // Save requires name + connection fields
-  const isSaveValid = isFormValid && !!formData.name?.trim();
+  // Both Test and Save require name
+  const isFormValid = checkFormValid(meta) && !!formData.name?.trim();
+  // Save same requirement
+  const isSaveValid = isFormValid;
 
   const updateFormField = (field: string, value: unknown) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
