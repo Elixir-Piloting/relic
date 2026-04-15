@@ -178,8 +178,8 @@ function MainLayoutContent({ children }: MainLayoutProps) {
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        setEditingConnection(conn);
-                        setConnectionDialogOpen(true);
+                        router.push(`/add-connection/${conn.provider}?connectionId=${conn.id}`);
+                        setConnectionsPopoverOpen(false);
                       }}
                       className="opacity-0 group-hover:opacity-100 p-1 hover:bg-accent-foreground/10 rounded transition-opacity"
                     >

@@ -13,8 +13,9 @@ import { parseConnectionURL } from "@/lib/connections/url-parser";
 import type { ConnectionConfig } from "@/lib/db/types";
 import { useSaveConnection } from "@/lib/query/hooks/use-connections";
 import { Persistence } from "@/lib/persistence";
-import { Loader2 } from "lucide-react";
+import { Loader2, ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getConnection } from "@/lib/db/indexeddb";
 
 interface ConnectionFormPageProps {
   params: Promise<{ provider: string }>;
@@ -45,43 +46,89 @@ function ConnectionFormContent({ provider }: { provider: string }) {
   const saveConnectionMutation = useSaveConnection();
 
   const [formData, setFormData] = useState(DEFAULT_FORM_DATA);
+  const [existingConnectionId, setExistingConnectionId] = useState<string | null>(null);
   const [isTesting, setIsTesting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [urlParseError, setUrlParseError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<{type: 'success' | 'error'; message: string} | null>(null);
+  const [connectionId, setConnectionId] = useState<string | null>(null);
+
+  const isEditing = !!connectionId;
 
   useEffect(() => {
-    const providerEnum = provider as DatabaseProvider;
-    const meta = getProviderMetadata(providerEnum);
-    
-    setFormData((prev) => ({
-      ...prev,
-      provider: providerEnum,
-      port: meta.defaultPort || prev.port,
-    }));
+    const connectionIdParam = searchParams.get("connectionId");
+    setConnectionId(connectionIdParam);
+  }, [searchParams]);
 
-    const connectionStringParam = searchParams.get("connectionString");
-    if (connectionStringParam) {
-      try {
-        const parsed = parseConnectionURL(decodeURIComponent(connectionStringParam));
-        setFormData({
-          ...DEFAULT_FORM_DATA,
-          provider: providerEnum,
-          connectionString: decodeURIComponent(connectionStringParam),
-          host: parsed.host || "",
-          port: parsed.port || meta.defaultPort,
-          database: parsed.database || "",
-          user: parsed.user || "",
-          password: parsed.password || "",
-        });
-      } catch {
-        setFormData((prev) => ({
-          ...prev,
-          provider: providerEnum,
-          connectionString: decodeURIComponent(connectionStringParam),
-        }));
+  useEffect(() => {
+    async function loadConnection() {
+      setIsLoading(true);
+      const connectionIdParam = searchParams.get("connectionId");
+      const connectionStringParam = searchParams.get("connectionString");
+
+      if (connectionIdParam) {
+        const existingConn = await getConnection(connectionIdParam);
+        if (existingConn) {
+          setFormData({
+            name: existingConn.name || "",
+            provider: existingConn.provider as DatabaseProvider,
+            host: existingConn.host || "",
+            port: existingConn.port || 5432,
+            database: existingConn.database || "",
+            user: existingConn.user || "",
+            password: existingConn.password || "",
+            connectionString: existingConn.connectionString || "",
+            filePath: existingConn.filePath || "",
+            ssl: existingConn.ssl || false,
+            ssh: existingConn.ssh || false,
+            sshHost: existingConn.sshHost || "",
+            sshPort: existingConn.sshPort || 22,
+            sshUser: existingConn.sshUser || "",
+            sshKeyPath: existingConn.sshKeyPath || "",
+            sshPassword: existingConn.sshPassword || "",
+          });
+          setExistingConnectionId(existingConn.id);
+          setIsLoading(false);
+          return;
+        }
       }
+
+      const providerEnum = provider as DatabaseProvider;
+      const meta = getProviderMetadata(providerEnum);
+      
+      setFormData((prev) => ({
+        ...prev,
+        provider: providerEnum,
+        port: meta.defaultPort || prev.port,
+      }));
+
+      if (connectionStringParam) {
+        try {
+          const parsed = parseConnectionURL(decodeURIComponent(connectionStringParam));
+          setFormData({
+            ...DEFAULT_FORM_DATA,
+            provider: providerEnum,
+            connectionString: decodeURIComponent(connectionStringParam),
+            host: parsed.host || "",
+            port: parsed.port || meta.defaultPort,
+            database: parsed.database || "",
+            user: parsed.user || "",
+            password: parsed.password || "",
+          });
+        } catch {
+          setFormData((prev) => ({
+            ...prev,
+            provider: providerEnum,
+            connectionString: decodeURIComponent(connectionStringParam),
+          }));
+        }
+      }
+
+      setIsLoading(false);
     }
+
+    loadConnection();
   }, [provider, searchParams]);
 
   const meta = getProviderMetadata(formData.provider);
@@ -261,7 +308,7 @@ function ConnectionFormContent({ provider }: { provider: string }) {
     setIsSaving(true);
     try {
       const config: ConnectionConfig = {
-        id: `conn-${Date.now()}`,
+        id: existingConnectionId || `conn-${Date.now()}`,
         name: formData.name,
         provider: formData.provider,
         host: formData.host,
@@ -282,11 +329,9 @@ function ConnectionFormContent({ provider }: { provider: string }) {
 
       await saveConnectionMutation.mutateAsync({ connection: config });
       
-      Persistence.setActiveConnectionId(config.id);
-      
-      setStatusMessage({type: 'success', message: `Saved connection "${config.name}"`});
+      toast.success(isEditing ? `Updated connection "${config.name}"` : `Saved connection "${config.name}"`);
 
-      router.push(`/db/${config.id}`);
+      router.push("/");
     } catch (error) {
       setStatusMessage({type: 'error', message: error instanceof Error ? error.message : "Failed to save connection"});
     } finally {
@@ -402,14 +447,12 @@ function ConnectionFormContent({ provider }: { provider: string }) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="database">
-              {meta.id === DatabaseProvider.MONGODB ? "Database Name (optional)" : "Database Name (optional)"}
-            </Label>
+            <Label htmlFor="database">Database Name</Label>
             <Input
               id="database"
               value={formData.database}
               onChange={(e) => updateFormField("database", e.target.value)}
-              placeholder="Leave empty to select database after connecting"
+              placeholder="mydb"
             />
           </div>
 
@@ -438,10 +481,30 @@ function ConnectionFormContent({ provider }: { provider: string }) {
     );
   };
 
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center p-8">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8 marketing-buttons marketing-inputs">
       <div className="space-y-2">
-        <h1 className="text-2xl font-semibold">Add {meta.name} Connection</h1>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => router.back()}
+            className="-ml-2"
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <h1 className="text-2xl font-semibold">
+            {isEditing ? "Edit" : "Add"} {meta.name} Connection
+          </h1>
+        </div>
       </div>
 
       <div className="space-y-4">

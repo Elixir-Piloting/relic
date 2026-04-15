@@ -83,6 +83,11 @@ export default function HomePage() {
     setOpenPopoverId(null);
   };
 
+  const handleEditClick = (conn: ConnectionConfig) => {
+    router.push(`/add-connection/${conn.provider}?connectionId=${conn.id}`);
+    setOpenPopoverId(null);
+  };
+
   const handleConfirmDelete = async () => {
     if (connectionToDelete) {
       await deleteConnectionMutation.mutateAsync({ id: connectionToDelete.id });
@@ -186,6 +191,7 @@ export default function HomePage() {
                             Copy URL
                           </button>
                           <button
+                            onClick={() => handleEditClick(conn)}
                             className="flex items-center gap-2 w-full px-2 py-1.5 text-sm text-left rounded-md hover:bg-accent"
                           >
                             <Pencil className="h-4 w-4" />
