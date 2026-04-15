@@ -13,13 +13,14 @@ export default function VisualizerPage() {
   const params = useParams();
   const connectionId = params.connection as string;
   const [connection, setConnection] = useState<ConnectionConfig | null>(null);
+  const [isConnected, setIsConnected] = useState(false);
   const initializedRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (initializedRef.current === connectionId) return;
 
-    getConnectionAsync(connectionId).then(conn => {
+    getConnectionAsync(connectionId).then(async conn => {
       if (!conn) {
         return;
       }
@@ -29,11 +30,21 @@ export default function VisualizerPage() {
       Persistence.setActiveConnectionId(connectionId);
       Persistence.setActiveView(connectionId, "visualizer");
 
-      fetch("/api/db/connect", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(conn),
-      }).catch(console.error);
+      // Connect and wait for connection to be established
+      try {
+        await fetch("/api/db/connect", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(conn),
+        });
+
+        // Wait a bit for connection to settle
+        await new Promise(resolve => setTimeout(resolve, 200));
+        setIsConnected(true);
+      } catch (error) {
+        console.error("Failed to connect:", error);
+        setIsConnected(true); // Let SchemaVisualizer handle retry
+      }
     });
   }, [connectionId]);
 

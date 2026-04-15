@@ -9,7 +9,7 @@ import { PAGE_SIZE_OPTIONS } from "@/components/results-viewer";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { RefreshCw, Loader2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Check } from "lucide-react";
-import { getConnectionAsyncAsync } from "@/lib/connections/store";
+import { getConnectionAsync } from "@/lib/connections/store";
 import { Persistence } from "@/lib/persistence";
 import type { ConnectionConfig } from "@/lib/db/types";
 import type { ColumnInfo, IndexInfo, ConstraintInfo } from "@/lib/db/types";

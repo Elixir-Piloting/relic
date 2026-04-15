@@ -97,30 +97,38 @@ export function SchemaVisualizer({
   const loadAllSchemas = useCallback(async (schemaToLoad?: string | null) => {
     setIsLoading(true);
     try {
-      // First check connection status and reconnect if needed
-      try {
-        const statusRes = await fetch("/api/db/status");
-        const statusData = await statusRes.json();
-        if (!statusData.connected && connectionId) {
-          // Try to reconnect
-          const { getConnection } = await import("@/lib/connections/store");
-          const conn = getConnection(connectionId);
-          if (conn) {
-            try {
+      // First check connection status and reconnect if needed, waiting for connection
+      let isConnected = false;
+      const maxRetries = 3;
+      const retryDelay = 500;
+
+      for (let retry = 0; retry < maxRetries; retry++) {
+        try {
+          const statusRes = await fetch("/api/db/status");
+          const statusData = await statusRes.json();
+          isConnected = statusData.connected;
+
+          if (!isConnected && connectionId) {
+            const { getConnection } = await import("@/lib/connections/store");
+            const conn = getConnection(connectionId);
+            if (conn) {
               await fetch("/api/db/connect", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(conn),
               });
-              // Wait a bit for connection to establish
-              await new Promise((resolve) => setTimeout(resolve, 300));
-            } catch (reconnectError) {
-              console.error("Failed to reconnect:", reconnectError);
+              // Wait for connection to establish
+              await new Promise((resolve) => setTimeout(resolve, retryDelay));
+              continue; // Check connection status again
             }
           }
+          break; // Connected or no connectionId, exit retry loop
+        } catch (statusError) {
+          console.error("Failed to check connection status:", statusError);
+          if (retry < maxRetries - 1) {
+            await new Promise((resolve) => setTimeout(resolve, retryDelay));
+          }
         }
-      } catch (statusError) {
-        console.error("Failed to check connection status:", statusError);
       }
       
       // Load all schemas
@@ -160,13 +168,24 @@ export function SchemaVisualizer({
       });
       
       setAvailableSchemas(sortedSchemas);
-      
+
+      // Auto-retry if no schemas found (connection might not be ready yet)
       if (sortedSchemas.length === 0) {
+        const retryCount = (loadAllSchemas as any)._retryCount || 0;
+        if (retryCount < 3) {
+          (loadAllSchemas as any)._retryCount = retryCount + 1;
+          console.log(`[SchemaVisualizer] No schemas found, retrying... (${retryCount + 1}/3)`);
+          await new Promise(resolve => setTimeout(resolve, 500));
+          return loadAllSchemas(schemaToLoad);
+        }
+        (loadAllSchemas as any)._retryCount = 0;
         setTables([]);
         setRelationships([]);
         setIsLoading(false);
         return;
       }
+      // Reset retry count on successful load
+      (loadAllSchemas as any)._retryCount = 0;
 
       // Determine which schema to load - use parameter first, then currentSchema, then first available
       let selectedSchema = schemaToLoad || currentSchema;
@@ -382,22 +401,31 @@ export function SchemaVisualizer({
     }
   }, []);
 
+  const schemaLoadRef = useRef<string | null>(null);
+
   useEffect(() => {
     if (!connectionId) {
       setTables([]);
       setRelationships([]);
       setAvailableSchemas([]);
       setCurrentSchema(null);
+      schemaLoadRef.current = null;
       return;
     }
 
+    // Prevent double-loading for the same connectionId
+    if (schemaLoadRef.current === connectionId) {
+      return;
+    }
+    schemaLoadRef.current = connectionId;
+
     // Small delay to ensure connection is established, then load schemas
     const timer = setTimeout(() => {
-      loadAllSchemas(currentSchema);
+      loadAllSchemas(null); // Pass null to let function determine schema
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [connectionId, currentSchema, loadAllSchemas]);
+  }, [connectionId, loadAllSchemas]);
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;

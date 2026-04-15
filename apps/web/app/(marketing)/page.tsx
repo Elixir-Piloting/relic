@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { useConnections, useDeleteConnection } from "@/lib/query/hooks/use-connections";
 import type { ConnectionConfig } from "@/lib/db/types";
 import { Persistence } from "@/lib/persistence";
-import { getProviderMetadata } from "@/lib/db/providers";
+import { getProviderMetadata, DatabaseProvider } from "@/lib/db/providers";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AppLogo } from "@/components/app-logo";

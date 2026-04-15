@@ -14,6 +14,15 @@ export const ConnectionConfigSchema = z.object({
   filePath: z.string().optional(),
   // For connection strings
   connectionString: z.string().optional(),
+  // Connection options
+  ssl: z.boolean().optional(),
+  ssh: z.boolean().optional(),
+  // SSH tunnel configuration (used when ssh is true)
+  sshHost: z.string().optional(),
+  sshPort: z.number().int().min(1).max(65535).optional(),
+  sshUser: z.string().optional(),
+  sshKeyPath: z.string().optional(),
+  sshPassword: z.string().optional(),
 });
 
 export type ConnectionConfig = z.infer<typeof ConnectionConfigSchema>;

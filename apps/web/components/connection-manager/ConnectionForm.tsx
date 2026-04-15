@@ -36,6 +36,13 @@ const DEFAULT_FORM_DATA: Partial<ConnectionConfig> = {
   user: "",
   password: "",
   connectionString: "",
+  ssl: false,
+  ssh: false,
+  sshHost: "",
+  sshPort: 22,
+  sshUser: "",
+  sshKeyPath: "",
+  sshPassword: "",
 };
 
 export function ConnectionForm({
@@ -100,6 +107,13 @@ export function ConnectionForm({
         password: editingConnection.password,
         filePath: editingConnection.filePath,
         connectionString: editingConnection.connectionString,
+        ssl: editingConnection.ssl,
+        ssh: editingConnection.ssh,
+        sshHost: editingConnection.sshHost,
+        sshPort: editingConnection.sshPort,
+        sshUser: editingConnection.sshUser,
+        sshKeyPath: editingConnection.sshKeyPath,
+        sshPassword: editingConnection.sshPassword,
       });
     } else {
       setStep(1);

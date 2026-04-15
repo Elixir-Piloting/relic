@@ -9,7 +9,10 @@
  * - LibSQL/Turso: libsql://host/database
  */
 
+import { DatabaseProvider } from "@/lib/db/providers";
+
 export interface ParsedConnectionURL {
+  provider?: DatabaseProvider;
   host: string;
   port: number;
   database: string;
@@ -93,8 +96,14 @@ export function parseConnectionURL(url: string): ParsedConnectionURL {
       if (!host) {
         throw new Error("Missing required connection parameters (host)");
       }
+
+      let provider: DatabaseProvider = DatabaseProvider.POSTGRESQL;
+      if (isMySQL) provider = DatabaseProvider.MYSQL;
+      else if (isMongoDB) provider = DatabaseProvider.MONGODB;
+      else if (isLibSQL) provider = DatabaseProvider.LIBSQL;
       
       return {
+        provider,
         host: decodeURIComponent(host),
         port,
         database: database ? decodeURIComponent(database) : "",
@@ -193,7 +202,13 @@ export function parseConnectionURL(url: string): ParsedConnectionURL {
       throw new Error("Missing required connection parameters (host)");
     }
     
+    let provider: DatabaseProvider = DatabaseProvider.POSTGRESQL;
+    if (protocol === "mysql") provider = DatabaseProvider.MYSQL;
+    else if (protocol === "mongodb") provider = DatabaseProvider.MONGODB;
+    else if (protocol === "libsql") provider = DatabaseProvider.LIBSQL;
+    
     return {
+      provider,
       host: decodedHost,
       port,
       database: decodedDatabase,
@@ -262,6 +277,7 @@ function parseMongoDBSRV(url: string): ParsedConnectionURL {
   
   // MongoDB SRV always uses SSL
   return {
+    provider: DatabaseProvider.MONGODB,
     host: decodedHost,
     port: 27017, // MongoDB default (SRV doesn't specify port)
     database: decodedDatabase,

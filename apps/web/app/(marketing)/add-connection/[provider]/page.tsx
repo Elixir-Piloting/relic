@@ -32,6 +32,11 @@ const DEFAULT_FORM_DATA = {
   filePath: "",
   ssl: false,
   ssh: false,
+  sshHost: "",
+  sshPort: 22,
+  sshUser: "",
+  sshKeyPath: "",
+  sshPassword: "",
 };
 
 function ConnectionFormContent({ provider }: { provider: string }) {
@@ -204,6 +209,11 @@ function ConnectionFormContent({ provider }: { provider: string }) {
         filePath: formData.filePath,
         ssl: formData.ssl,
         ssh: formData.ssh,
+        sshHost: formData.sshHost,
+        sshPort: formData.sshPort,
+        sshUser: formData.sshUser,
+        sshKeyPath: formData.sshKeyPath,
+        sshPassword: formData.sshPassword,
       };
 
       await saveConnectionMutation.mutateAsync({ connection: config });
@@ -402,7 +412,7 @@ function ConnectionFormContent({ provider }: { provider: string }) {
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
                 <Label htmlFor="ssl">SSL Mode</Label>
-                <p className="text-sm text-muted-foreground">Disabled</p>
+                <p className="text-sm text-muted-foreground">{formData.ssl ? "Enabled" : "Disabled"}</p>
               </div>
               <Switch
                 id="ssl"
@@ -414,7 +424,7 @@ function ConnectionFormContent({ provider }: { provider: string }) {
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
                 <Label htmlFor="ssh">SSH Tunnel</Label>
-                <p className="text-sm text-muted-foreground">Off</p>
+                <p className="text-sm text-muted-foreground">{formData.ssh ? "Enabled" : "Disabled"}</p>
               </div>
               <Switch
                 id="ssh"
@@ -422,6 +432,60 @@ function ConnectionFormContent({ provider }: { provider: string }) {
                 onCheckedChange={(checked) => updateFormField("ssh", checked)}
               />
             </div>
+
+            {formData.ssh && (
+              <div className="space-y-4 pl-4 border-l-2 border-muted">
+                <div className="space-y-2">
+                  <Label htmlFor="sshHost">SSH Host</Label>
+                  <Input
+                    id="sshHost"
+                    value={formData.sshHost || ""}
+                    onChange={(e) => updateFormField("sshHost", e.target.value)}
+                    placeholder="Jump server hostname"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="sshPort">SSH Port</Label>
+                    <Input
+                      id="sshPort"
+                      type="number"
+                      value={formData.sshPort || 22}
+                      onChange={(e) => updateFormField("sshPort", parseInt(e.target.value) || 22)}
+                      placeholder="22"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="sshUser">SSH Username</Label>
+                    <Input
+                      id="sshUser"
+                      value={formData.sshUser || ""}
+                      onChange={(e) => updateFormField("sshUser", e.target.value)}
+                      placeholder="username"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="sshKeyPath">SSH Key Path (optional)</Label>
+                  <Input
+                    id="sshKeyPath"
+                    value={formData.sshKeyPath || ""}
+                    onChange={(e) => updateFormField("sshKeyPath", e.target.value)}
+                    placeholder="/path/to/private/key"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="sshPassword">SSH Password (if no key)</Label>
+                  <Input
+                    id="sshPassword"
+                    type="password"
+                    value={formData.sshPassword || ""}
+                    onChange={(e) => updateFormField("sshPassword", e.target.value)}
+                    placeholder="Password for key encryption"
+                  />
+                </div>
+              </div>
+            )}
           </div>
         </>
       )}

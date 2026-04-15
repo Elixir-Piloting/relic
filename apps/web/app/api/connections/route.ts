@@ -38,6 +38,7 @@ export async function POST(request: NextRequest) {
     // Test connection
     const testConfig = {
       ...config,
+      name: config.name || "Test Connection",
       id: "test-" + Date.now(),
     };
     
